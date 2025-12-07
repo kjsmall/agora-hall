@@ -1,17 +1,27 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
-import { createRoom, ROOM_PHASES } from './utils/RoomClass';
+import { createDebateTurn, DEBATE_STATUS } from './utils/domainModels';
 
-test('renders login form by default', () => {
+test('renders login screen by default', () => {
   render(<App />);
-  expect(screen.getByText(/Log In to Agora/i)).toBeInTheDocument();
+  expect(screen.getByText(/Agora Hall Login/i)).toBeInTheDocument();
 });
 
-test('createRoom supplies defaults and phases', () => {
-  const room = createRoom({ id: 123, topic: 'Test' });
-  expect(room.id).toBe(123);
-  expect(room.topic).toBe('Test');
-  expect(room.phase).toBe(ROOM_PHASES.SETUP);
-  expect(Array.isArray(room.definitions)).toBe(true);
-  expect(room.rebuttalSubmitted).toBe(false);
+test('createDebateTurn enforces linear turn shape', () => {
+  const turn = createDebateTurn({
+    debateId: 'debate-1',
+    turnNumber: 1,
+    authorId: 'alex',
+    content: 'Test turn',
+  });
+  expect(turn.turnNumber).toBe(1);
+  expect(turn.debateId).toBe('debate-1');
+  expect(turn.authorId).toBe('alex');
+  expect(turn.content).toBe('Test turn');
+});
+
+test('debate status includes active/resolved/scheduled', () => {
+  expect(DEBATE_STATUS.ACTIVE).toBe('active');
+  expect(DEBATE_STATUS.RESOLVED).toBe('resolved');
+  expect(DEBATE_STATUS.SCHEDULED).toBe('scheduled');
 });
