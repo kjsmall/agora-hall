@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 
 export default function Header({ currentUser, onLogout }) {
   return (
-    <header className="flex items-center justify-between py-6">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
       <Link to="/" className="text-2xl font-semibold tracking-tight text-cyan-200">
         Agora Hall
       </Link>
-      <div className="flex items-center gap-6 text-sm">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
         <Link to="/" className="text-slate-200 hover:text-white transition-colors">
           Home
         </Link>

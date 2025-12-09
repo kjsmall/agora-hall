@@ -5,7 +5,6 @@ import {
   Route,
   Routes,
   useNavigate,
-  useLocation,
 } from 'react-router-dom';
 import LoginScreen from './pages/LoginScreen';
 import HomeScreen from './pages/HomeScreen';
@@ -67,74 +66,13 @@ function AppShell() {
   const [authError, setAuthError] = useState(null);
   const [authNotice, setAuthNotice] = useState(null);
   const [thoughtError, setThoughtError] = useState(null);
+  const [positionError, setPositionError] = useState(null);
+  const [debateError, setDebateError] = useState(null);
 
   const [thoughts, setThoughts] = useState([]);
 
-  const [positions, setPositions] = useState([
-    {
-      id: 'p1',
-      authorId: 'alex',
-      thesis: 'Truth requires upfront definitions before adversarial exchange.',
-      definitions: [
-        { term: 'Truth', definition: 'A claim that corresponds to reality independent of preference.' },
-        { term: 'Relativism', definition: 'The stance that truth is contingent on cultural or personal frames.' },
-      ],
-      sources: ['SEP: Truth', 'Habermas: Theory of Communicative Action'],
-      createdAt: '2024-03-11T18:00:00Z',
-      fromThoughtId: 't1',
-      category: 'Philosophy & Ethics',
-    },
-    {
-      id: 'p2',
-      authorId: 'marco',
-      thesis: 'Civic duty anchors liberty; without it, freedom decays into license.',
-      definitions: [
-        { term: 'Duty', definition: 'Obligations owed to community and institutions.' },
-        { term: 'Liberty', definition: 'The protected space for individual agency under law.' },
-      ],
-      sources: ['Arendt: On Revolution', 'Rawls: A Theory of Justice'],
-      createdAt: '2024-03-14T12:00:00Z',
-      fromThoughtId: 't3',
-      category: 'Politics & Governance',
-    },
-  ]);
-
-  const [debates, setDebates] = useState([
-    {
-      id: 'd1',
-      positionId: 'p1',
-      affirmativeUserId: 'alex',
-      negativeUserId: 'riley',
-      status: DEBATE_STATUS.ACTIVE,
-      createdAt: '2024-03-12T10:00:00Z',
-      resolvedAt: null,
-      challengeStatus: 'accepted',
-      challengerOpening: 'We must pin truth and relativism with shared definitions; here is my stance.',
-      challengeeOpening: 'Truth can be stress-tested; definitions help but cannot bind inquiry.',
-      opposingPosition: 'Relativism overstates flexibility; truth is sturdier than preference.',
-      challengeDefinitions: [{ term: 'Truth', definition: 'Correspondence with reality' }],
-      closingChallenger: '',
-      closingOpponent: '',
-      votes: { challenger: 0, challengee: 0, neither: 0 },
-    },
-    {
-      id: 'd2',
-      positionId: 'p2',
-      affirmativeUserId: 'marco',
-      negativeUserId: 'sofia',
-      status: DEBATE_STATUS.RESOLVED,
-      createdAt: '2024-02-01T15:00:00Z',
-      resolvedAt: '2024-02-03T10:30:00Z',
-      challengeStatus: 'accepted',
-      challengerOpening: 'Liberty without duty collapses; I argue duty anchors freedom.',
-      challengeeOpening: 'Duty must not smother liberty; balance is key.',
-      opposingPosition: 'Freedom outweighs communal duty when they conflict.',
-      challengeDefinitions: [{ term: 'Liberty', definition: 'Protected space for individual agency under law.' }],
-      closingChallenger: 'Duty and liberty can align; ignoring duty invites chaos.',
-      closingOpponent: 'Over-indexing on duty stifles progress; liberty must lead.',
-      votes: { challenger: 1, challengee: 1, neither: 0 },
-    },
-  ]);
+  const [positions, setPositions] = useState([]);
+  const [debates, setDebates] = useState([]);
 
   const [turns, setTurns] = useState([
     createDebateTurn({
@@ -172,7 +110,6 @@ function AppShell() {
   ]);
 
   const navigate = useNavigate();
-  const location = useLocation();
   const userDirectory = useMemo(
     () => users.reduce((acc, user) => ({ ...acc, [user.id]: user }), {}),
     [users]
@@ -203,13 +140,95 @@ function AppShell() {
     setThoughtError(null);
   }, []);
 
+  const fetchPositions = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('positions')
+      .select('id, author_id, premise, definitions, sources, category, created_at, from_thought_id')
+      .order('created_at', { ascending: false });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading positions from Supabase', error);
+      setPositionError(error.message || 'Unable to load positions.');
+      return;
+    }
+    const mapped = (data || []).map((row) => ({
+      id: row.id,
+      authorId: row.author_id,
+      thesis: row.premise || '',
+      definitions: row.definitions || [],
+      sources: row.sources || [],
+      category: row.category || 'miscellaneous',
+      createdAt: row.created_at,
+      fromThoughtId: row.from_thought_id || null,
+    }));
+    setPositions(mapped);
+    setPositionError(null);
+  }, []);
+
+  const fetchDebates = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('debates')
+      .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
+      .order('created_at', { ascending: false });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading debates from Supabase', error);
+      setDebateError(error.message || 'Unable to load debates.');
+      return;
+    }
+    const mapped = (data || []).map((row) => ({
+      id: row.id,
+      positionId: row.position_id,
+      affirmativeUserId: row.initiator_user_id,
+      negativeUserId: row.respondent_user_id,
+      status: row.status || DEBATE_STATUS.SCHEDULED,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at,
+      winnerUserId: row.winner_user_id || null,
+      maxRounds: row.max_rounds || 10,
+      // Client-only fields
+      challengeStatus: 'accepted',
+      challengerOpening: '',
+      challengeeOpening: '',
+      opposingPosition: '',
+      challengeDefinitions: [],
+      closingChallenger: '',
+      closingOpponent: '',
+      votes: { challenger: 0, challengee: 0, neither: 0 },
+    }));
+    setDebates(mapped);
+    setDebateError(null);
+  }, []);
+
   useEffect(() => {
-    fetchThoughts();
-  }, [fetchThoughts, currentUser]);
+    if (currentUser) {
+      fetchThoughts();
+    } else {
+      setThoughts([]);
+    }
+  }, [currentUser, fetchThoughts]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchPositions();
+    } else {
+      setPositions([]);
+    }
+  }, [currentUser, fetchPositions]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchDebates();
+    } else {
+      setDebates([]);
+    }
+  }, [currentUser, fetchDebates]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (!supabase) return;
+      if (!supabase || !currentUser) return;
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, display_name, user_email');
@@ -220,20 +239,27 @@ function AppShell() {
       }
       setUsers(data || []);
     };
+    if (!currentUser) {
+      setUsers([]);
+      return undefined;
+    }
     fetchProfiles();
-  }, []);
+    return undefined;
+  }, [currentUser]);
 
-  const mergeProfile = (profile) => {
+  const mergeProfile = useCallback((profile) => {
     setUsers((prev) => {
       const exists = prev.some((u) => u.id === profile.id);
       return exists ? prev.map((u) => (u.id === profile.id ? { ...u, ...profile } : u)) : [...prev, profile];
     });
-  };
+  }, []);
 
   const ensureProfile = useCallback(
     async (user) => {
       if (!user) return null;
       const baseProfile = profileFromUser(user);
+       // Optimistically set so routing/UI can proceed even if network is slow.
+      setCurrentUser((prev) => prev || baseProfile);
       if (!supabase) {
         mergeProfile(baseProfile);
         setCurrentUser(baseProfile);
@@ -260,40 +286,12 @@ function AppShell() {
       setCurrentUser(ensured);
       return ensured;
     },
-    [supabase, mergeProfile]
+    [mergeProfile]
   );
 
+  // On mount, stay logged out until explicit login. We do not auto-restore sessions.
   useEffect(() => {
-    const syncSession = async () => {
-      if (!supabase) return;
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('Error getting session', error);
-        return;
-      }
-      const sessionUser = data?.session?.user;
-      if (sessionUser) {
-        await ensureProfile(sessionUser);
-        if (location.pathname === '/login') {
-          navigate('/');
-        }
-      }
-    };
-    syncSession();
-    const { data: listener } = supabase?.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await ensureProfile(session.user);
-        if (location.pathname === '/login') {
-          navigate('/');
-        }
-      } else {
-        setCurrentUser(null);
-      }
-    }) || {};
-    return () => {
-      listener?.subscription?.unsubscribe();
-    };
+    setCurrentUser(null);
   }, []);
 
   const getDisplayName = (userId) => {
@@ -324,7 +322,13 @@ function AppShell() {
       ).length
     : 0;
 
-  const handleLogin = async (identifier) => {
+  const handleLogin = async (identifier, password) => {
+    // eslint-disable-next-line no-console
+    console.log('handleLogin called', {
+      identifier,
+      hasPassword: Boolean(password),
+      supabaseReady: Boolean(supabase),
+    });
     setAuthError(null);
     setAuthNotice(null);
     if (!supabase) {
@@ -332,28 +336,59 @@ function AppShell() {
       return;
     }
     const trimmed = identifier.trim().toLowerCase();
-    if (!trimmed) return;
-
-    const emailRedirectTo = 'http://localhost:3000';
-    const email = trimmed;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo,
-        shouldCreateUser: true,
-      },
-    });
-    if (error) {
-      setAuthError(error.message || 'Unable to send login link.');
+    if (!trimmed) {
+      setAuthError('Email is required.');
       return;
     }
-    setAuthNotice('Check your email for a login link to continue.');
+    if (!password) {
+      setAuthError('Password is required.');
+      return;
+    }
+
+    setAuthNotice('Attempting to sign in...');
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmed,
+        password,
+      });
+      // eslint-disable-next-line no-console
+      console.log('supabase.signInWithPassword result', { data, error });
+
+      if (error) {
+        setAuthError(error.message || 'Unable to authenticate.');
+        setAuthNotice(null);
+        return;
+      }
+
+      const sessionUser = data?.session?.user || data?.user;
+      if (sessionUser) {
+        const ensured = await ensureProfile(sessionUser);
+        if (ensured) {
+          setCurrentUser(ensured);
+          setAuthNotice('Login successful. Redirecting...');
+          navigate('/');
+          return;
+        }
+        setAuthError('Unable to load profile after login.');
+        setAuthNotice(null);
+        return;
+      }
+
+      setAuthError('Unknown error occurred');
+      setAuthNotice(null);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('signInWithPassword exception', err);
+      setAuthError(err.message || 'Authentication failed.');
+      setAuthNotice(null);
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setCurrentUser(null);
+    await supabase?.auth?.signOut().catch(() => {});
     navigate('/login');
-    supabase?.auth?.signOut().catch(() => {});
   };
 
   const addThought = async ({ content, category, linkedPositionId = null, replyToThoughtId = null }) => {
@@ -418,6 +453,36 @@ function AppShell() {
     ).length;
     if (todayCount >= POSITIONS_PER_DAY) return null;
     if (!category) return null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('positions')
+        .insert({
+          author_id: authorId,
+          premise: thesis,
+          definitions,
+          sources,
+          category,
+        })
+        .select('id, author_id, premise, definitions, sources, category, created_at, from_thought_id')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error inserting position', error);
+        return null;
+      }
+      const newPosition = {
+        id: data.id,
+        authorId: data.author_id,
+        thesis: data.premise || '',
+        definitions: data.definitions || [],
+        sources: data.sources || [],
+        category: data.category || category,
+        createdAt: data.created_at,
+        fromThoughtId: data.from_thought_id || null,
+      };
+      setPositions((prev) => [newPosition, ...prev]);
+      return newPosition.id;
+    }
     const newPosition = createPosition({
       authorId,
       thesis,
@@ -425,38 +490,116 @@ function AppShell() {
       sources,
       category,
     });
-    setPositions((prev) => [...prev, newPosition]);
+    setPositions((prev) => [newPosition, ...prev]);
     return newPosition.id;
   };
 
   const startDebate = async (positionId) => {
     if (!currentUser) return null;
     const ensuredUser = await ensureProfile(currentUser);
+    const initiatorId = ensuredUser?.id || currentUser.id;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('debates')
+        .insert({
+          position_id: positionId,
+          initiator_user_id: initiatorId,
+          respondent_user_id: null,
+          status: DEBATE_STATUS.ACTIVE,
+        })
+        .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error creating debate', error);
+        return null;
+      }
+      const mapped = {
+        id: data.id,
+        positionId: data.position_id,
+        affirmativeUserId: data.initiator_user_id,
+        negativeUserId: data.respondent_user_id,
+        status: data.status || DEBATE_STATUS.ACTIVE,
+        createdAt: data.created_at,
+        resolvedAt: data.resolved_at,
+        winnerUserId: data.winner_user_id,
+        maxRounds: data.max_rounds || 10,
+        challengeStatus: 'accepted',
+        challengerOpening: '',
+        challengeeOpening: '',
+        opposingPosition: '',
+        challengeDefinitions: [],
+        closingChallenger: '',
+        closingOpponent: '',
+        votes: { challenger: 0, challengee: 0, neither: 0 },
+      };
+      setDebates((prev) => [mapped, ...prev]);
+      return mapped.id;
+    }
     const newDebate = createDebate({
       positionId,
-      affirmativeUserId: ensuredUser?.id || currentUser.id,
-      negativeUserId: 'tbd-opponent',
+      affirmativeUserId: initiatorId,
+      negativeUserId: null,
       status: DEBATE_STATUS.ACTIVE,
-      challengeStatus: 'accepted',
     });
-    setDebates((prev) => [...prev, newDebate]);
+    setDebates((prev) => [newDebate, ...prev]);
     return newDebate.id;
   };
 
   const createChallenge = async ({ positionId, opening, opposingPosition, definitions }) => {
     if (!currentUser) return null;
     const ensuredUser = await ensureProfile(currentUser);
+    const initiatorId = ensuredUser?.id || currentUser.id;
+    const respondentId = positions.find((p) => p.id === positionId)?.authorId || null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('debates')
+        .insert({
+          position_id: positionId,
+          initiator_user_id: initiatorId,
+          respondent_user_id: respondentId,
+          status: DEBATE_STATUS.SCHEDULED,
+        })
+        .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error creating challenge debate', error);
+        return null;
+      }
+      const mapped = {
+        id: data.id,
+        positionId: data.position_id,
+        affirmativeUserId: data.initiator_user_id,
+        negativeUserId: data.respondent_user_id,
+        status: data.status || DEBATE_STATUS.SCHEDULED,
+        createdAt: data.created_at,
+        resolvedAt: data.resolved_at,
+        winnerUserId: data.winner_user_id,
+        maxRounds: data.max_rounds || 10,
+        challengeStatus: 'pending',
+        challengerOpening: opening,
+        challengeeOpening: '',
+        opposingPosition,
+        challengeDefinitions: definitions || [],
+        closingChallenger: '',
+        closingOpponent: '',
+        votes: { challenger: 0, challengee: 0, neither: 0 },
+      };
+      setDebates((prev) => [mapped, ...prev]);
+      return mapped.id;
+    }
     const newDebate = createDebate({
       positionId,
-      affirmativeUserId: ensuredUser?.id || currentUser.id,
-      negativeUserId: positions.find((p) => p.id === positionId)?.authorId || 'unknown',
+      affirmativeUserId: initiatorId,
+      negativeUserId: respondentId,
       status: DEBATE_STATUS.SCHEDULED,
       challengeStatus: 'pending',
       challengerOpening: opening,
       opposingPosition,
       challengeDefinitions: definitions || [],
     });
-    setDebates((prev) => [...prev, newDebate]);
+    setDebates((prev) => [newDebate, ...prev]);
     return newDebate.id;
   };
 
@@ -570,6 +713,8 @@ function AppShell() {
                 <HomeScreen
                   thoughts={thoughts}
                   thoughtError={thoughtError}
+                  positionError={positionError}
+                  debateError={debateError}
                   positions={positions}
                   debates={debates}
                   users={userDirectory}
@@ -684,6 +829,8 @@ function AppShell() {
                   debates={debates}
                   getDisplayName={getDisplayName}
                   thoughtError={thoughtError}
+                  positionError={positionError}
+                  debateError={debateError}
                   getCategoryLabel={getCategoryLabel}
                 />
               ) : (

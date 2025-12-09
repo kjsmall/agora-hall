@@ -22,6 +22,10 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
 
   const isOwner = currentUser?.id === userId;
 
+  if (!user) {
+    return <p className="text-slate-400">User not found.</p>;
+  }
+
   const hasChanges =
     displayName !== (user.display_name || '') ||
     username !== (user.username || '') ||
@@ -31,10 +35,6 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
     if (!isOwner || !hasChanges) return;
     onUpdateUser(userId, { display_name: displayName, username, user_email: email });
   };
-
-  if (!user) {
-    return <p className="text-slate-400">User not found.</p>;
-  }
 
   return (
     <div className="space-y-6">

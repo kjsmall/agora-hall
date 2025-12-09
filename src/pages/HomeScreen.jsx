@@ -11,6 +11,8 @@ export default function HomeScreen({
   users,
   getDisplayName,
   thoughtError,
+  positionError,
+  debateError,
   getCategoryLabel,
   onAddThought,
   onAddPosition,
@@ -248,6 +250,7 @@ export default function HomeScreen({
           title="Recent Positions"
           description="Formal theses with definitions and sources. Start debates from here."
         >
+          {positionError && <p className="text-sm text-red-300">{positionError}</p>}
           <div className="grid gap-4">
             {positions.slice(0, 4).map((position) => (
               <Card key={position.id}>
@@ -278,6 +281,7 @@ export default function HomeScreen({
           title="Active Debates"
           description="Live, turn-limited duels. No branching threads."
         >
+          {debateError && <p className="text-sm text-red-300">{debateError}</p>}
           <div className="grid gap-4">
             {activeDebates.slice(0, 4).map((debate) => (
               <Card key={debate.id}>

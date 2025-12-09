@@ -4,7 +4,7 @@ import { CATEGORY_OPTIONS, DEBATE_STATUS } from '../utils/domainModels';
 
 const formatDate = (value) => new Date(value).toLocaleString();
 
-export default function ExploreScreen({ thoughts, positions, debates, getDisplayName, thoughtError, getCategoryLabel }) {
+export default function ExploreScreen({ thoughts, positions, debates, getDisplayName, thoughtError, getCategoryLabel, positionError, debateError }) {
   const [selectedCategory, setSelectedCategory] = useState(CATEGORY_OPTIONS[0]);
 
   const tags = useMemo(() => {
@@ -77,11 +77,11 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
               </div>
             </Section>
 
-            <Section title="Categories" description="Author-selected topic areas.">
-              <div className="space-y-3">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+        <Section title="Categories" description="Author-selected topic areas.">
+          <div className="space-y-3">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 >
                   {CATEGORY_OPTIONS.map((cat) => (
@@ -142,6 +142,7 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
 
         <Section title="Feed" description="Latest thoughts and positions in one scroll.">
           {thoughtError && <p className="text-sm text-red-300">{thoughtError}</p>}
+          {positionError && <p className="text-sm text-red-300">{positionError}</p>}
           <div className="space-y-3">
             {feedItems.map((item) => (
                 <div
