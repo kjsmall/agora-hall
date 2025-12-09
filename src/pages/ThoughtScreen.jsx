@@ -43,10 +43,10 @@ export default function ThoughtScreen({
     );
   }
 
-  const handleSubmitComment = () => {
+  const handleSubmitComment = async () => {
     const trimmed = commentDraft.trim();
     if (!trimmed || !commentCategory) return;
-    const id = onAddComment(trimmed, thoughtId, commentCategory);
+    const id = await onAddComment(trimmed, thoughtId, commentCategory);
     if (id) {
       setCommentDraft('');
       setCommentCategory('');

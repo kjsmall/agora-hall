@@ -10,6 +10,8 @@ export default function HomeScreen({
   debates,
   users,
   getDisplayName,
+  thoughtError,
+  getCategoryLabel,
   onAddThought,
   onAddPosition,
   thoughtsTodayCount,
@@ -36,20 +38,20 @@ export default function HomeScreen({
   const activeDebates = debates.filter((debate) => debate.status === DEBATE_STATUS.ACTIVE);
   const resolvedDebates = debates.filter((debate) => debate.status === DEBATE_STATUS.RESOLVED);
 
-  const handleThoughtSubmit = () => {
+  const handleThoughtSubmit = async () => {
     const trimmed = thoughtDraft.trim();
     if (!trimmed || !thoughtCategory) return;
-    const id = onAddThought(trimmed, thoughtCategory);
+    const id = await onAddThought(trimmed, thoughtCategory);
     if (id) {
       setThoughtDraft('');
       setThoughtCategory('');
     }
   };
 
-  const handlePositionSubmit = () => {
+  const handlePositionSubmit = async () => {
     const trimmed = positionDraft.trim();
     if (!trimmed || !positionCategory) return;
-    const id = onAddPosition(trimmed, definitions, sources, positionCategory);
+    const id = await onAddPosition(trimmed, definitions, sources, positionCategory);
     if (id) setPositionDraft('');
     if (id) {
       setDefinitions([]);
@@ -212,6 +214,7 @@ export default function HomeScreen({
           title="Recent Thoughts"
           description="Fresh reflections ready to be promoted into Positions."
         >
+          {thoughtError && <p className="text-sm text-red-300">{thoughtError}</p>}
           <div className="grid gap-4">
             {thoughts.slice(0, 4).map((thought) => (
               <Card key={thought.id}>
@@ -227,7 +230,7 @@ export default function HomeScreen({
                   </Link>
                 </div>
                 <p className="text-slate-100 mt-2">{thought.content}</p>
-                <p className="text-xs text-cyan-200 mt-1">{thought.category}</p>
+                <p className="text-xs text-cyan-200 mt-1">{getCategoryLabel(thought.category)}</p>
                 {thought.linkedPositionId && (
                   <p className="text-xs text-slate-500 mt-2">
                     Promoted to Position:{' '}
@@ -260,7 +263,7 @@ export default function HomeScreen({
                   </Link>
                 </div>
                 <h3 className="text-lg font-semibold mt-2 text-slate-50">{position.thesis}</h3>
-                <p className="text-xs text-cyan-200 mt-1">{position.category}</p>
+                <p className="text-xs text-cyan-200 mt-1">{getCategoryLabel(position.category)}</p>
                 <p className="text-xs text-slate-400 mt-2">
                   {position.definitions.length} definitions · {position.sources.length} sources
                 </p>

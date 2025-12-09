@@ -4,7 +4,7 @@ import { CATEGORY_OPTIONS, DEBATE_STATUS } from '../utils/domainModels';
 
 const formatDate = (value) => new Date(value).toLocaleString();
 
-export default function ExploreScreen({ thoughts, positions, debates, getDisplayName }) {
+export default function ExploreScreen({ thoughts, positions, debates, getDisplayName, thoughtError, getCategoryLabel }) {
   const [selectedCategory, setSelectedCategory] = useState(CATEGORY_OPTIONS[0]);
 
   const tags = useMemo(() => {
@@ -140,9 +140,10 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
             </Section>
           </div>
 
-          <Section title="Feed" description="Latest thoughts and positions in one scroll.">
-            <div className="space-y-3">
-              {feedItems.map((item) => (
+        <Section title="Feed" description="Latest thoughts and positions in one scroll.">
+          {thoughtError && <p className="text-sm text-red-300">{thoughtError}</p>}
+          <div className="space-y-3">
+            {feedItems.map((item) => (
                 <div
                   key={item.id}
                   className="rounded-xl border border-slate-800 bg-slate-900/80 p-4"
@@ -169,7 +170,7 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
                       </Link>
                     )}
                   </div>
-                  <p className="text-xs text-cyan-200 mt-1">{item.category}</p>
+                <p className="text-xs text-cyan-200 mt-1">{getCategoryLabel(item.category)}</p>
                   <p className="text-slate-100 mt-2">
                     {item.type === 'thought' ? item.content : item.thesis}
                   </p>
@@ -200,7 +201,7 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
                       Open
                     </Link>
                   </div>
-                  <p className="text-xs text-cyan-200 mt-1">{thought.category}</p>
+                  <p className="text-xs text-cyan-200 mt-1">{getCategoryLabel(thought.category)}</p>
                   <p className="text-slate-100 mt-2">{thought.content}</p>
                 </div>
               ))}
@@ -227,7 +228,7 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
                       Open
                     </Link>
                   </div>
-                  <p className="text-xs text-cyan-200 mt-1">{position.category}</p>
+                  <p className="text-xs text-cyan-200 mt-1">{getCategoryLabel(position.category)}</p>
                   <p className="text-slate-100 mt-2">{position.thesis}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     {position.definitions.length} definitions · {position.sources.length} sources

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 
-export default function LoginScreen({ onLogin }) {
-  const [name, setName] = useState('');
+export default function LoginScreen({ onLogin, error, notice }) {
+  const [email, setEmail] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onLogin(name);
+    onLogin(email);
   };
 
   return (
@@ -18,15 +18,18 @@ export default function LoginScreen({ onLogin }) {
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300 mb-2">Your name</label>
+            <label className="block text-sm text-slate-300 mb-2">Email</label>
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-              placeholder="Add your name"
+              placeholder="you@example.com"
+              required
             />
           </div>
+          {error && <p className="text-sm text-red-300">{error}</p>}
+          {notice && <p className="text-sm text-cyan-200">{notice}</p>}
           <button
             type="submit"
             className="w-full py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors"

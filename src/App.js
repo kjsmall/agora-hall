@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   BrowserRouter as Router,
   Navigate,
   Route,
   Routes,
   useNavigate,
+  useLocation,
 } from 'react-router-dom';
 import LoginScreen from './pages/LoginScreen';
 import HomeScreen from './pages/HomeScreen';
@@ -15,6 +16,7 @@ import ThoughtScreen from './pages/ThoughtScreen';
 import ExploreScreen from './pages/ExploreScreen';
 import Header from './components/Header';
 import { CATEGORY_OPTIONS, DEBATE_STATUS, createDebate, createDebateTurn, createPosition, createThought } from './utils/domainModels';
+import { supabase } from './utils/supabaseClient';
 
 const isSameDay = (a, b) => {
   const d1 = new Date(a);
@@ -24,42 +26,49 @@ const isSameDay = (a, b) => {
 
 const THOUGHTS_PER_DAY = 5;
 const POSITIONS_PER_DAY = 1;
+const slugifyCategory = (value) =>
+  (value || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'miscellaneous';
+
+const CATEGORY_LABELS = {
+  philosophy_ethics: 'Philosophy & Ethics',
+  politics_governance: 'Politics & Governance',
+  economics_finance: 'Economics & Finance',
+  science_technology: 'Science & Technology',
+  society_culture: 'Society & Culture',
+  law_justice: 'Law & Justice',
+  health_medicine_bioethics: 'Health, Medicine & Bioethics',
+  environment_sustainability: 'Environment & Sustainability',
+  religion_theology_spirituality: 'Religion, Theology & Spirituality',
+  miscellaneous: 'Miscellaneous',
+};
+
+const profileFromUser = (user) => {
+  const base = (user.email || '').split('@')[0] || user.id.slice(0, 6);
+  return {
+    id: user.id,
+    username: base,
+    display_name: base,
+    user_email: user.email || '',
+  };
+};
 
 function AppShell() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([
-    { id: 'alex', username: 'alex', firstName: 'Alex', lastName: 'Mercer', email: 'alex@agora.local' },
-    { id: 'riley', username: 'riley', firstName: 'Riley', lastName: 'Tran', email: 'riley@agora.local' },
-    { id: 'marco', username: 'marco', firstName: 'Marco', lastName: 'Diaz', email: 'marco@agora.local' },
-    { id: 'sofia', username: 'sofia', firstName: 'Sofia', lastName: 'Demir', email: 'sofia@agora.local' },
+    { id: 'alex', username: 'alex', display_name: 'Alex Mercer', user_email: 'alex@agora.local' },
+    { id: 'riley', username: 'riley', display_name: 'Riley Tran', user_email: 'riley@agora.local' },
+    { id: 'marco', username: 'marco', display_name: 'Marco Diaz', user_email: 'marco@agora.local' },
+    { id: 'sofia', username: 'sofia', display_name: 'Sofia Demir', user_email: 'sofia@agora.local' },
   ]);
+  const [authError, setAuthError] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
+  const [thoughtError, setThoughtError] = useState(null);
 
-  const [thoughts, setThoughts] = useState([
-    {
-      id: 't1',
-      authorId: 'alex',
-      content: 'Rapid-fire takes reward spectacle. Agora should slow the room.',
-      createdAt: '2024-03-10T12:00:00Z',
-      linkedPositionId: 'p1',
-      category: 'Society & Culture',
-    },
-    {
-      id: 't2',
-      authorId: 'riley',
-      content: 'Relativism is a dodge. Shared terms are the scaffold of truth.',
-      createdAt: '2024-03-12T09:10:00Z',
-      linkedPositionId: 'p1',
-      category: 'Philosophy & Ethics',
-    },
-    {
-      id: 't3',
-      authorId: 'marco',
-      content: 'Liberty without shared duty collapses into a shouting match.',
-      createdAt: '2024-03-15T15:30:00Z',
-      linkedPositionId: 'p2',
-      category: 'Politics & Governance',
-    },
-  ]);
+  const [thoughts, setThoughts] = useState([]);
 
   const [positions, setPositions] = useState([
     {
@@ -163,16 +172,144 @@ function AppShell() {
   ]);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const userDirectory = useMemo(
     () => users.reduce((acc, user) => ({ ...acc, [user.id]: user }), {}),
     [users]
   );
 
+  const fetchThoughts = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('thoughts')
+      .select('id, author_id, content, created_at, category')
+      .order('created_at', { ascending: false });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading thoughts from Supabase', error);
+      setThoughtError(error.message || 'Unable to load thoughts.');
+      return;
+    }
+    const mapped = (data || []).map((row) =>
+      createThought({
+        id: row.id,
+        authorId: row.author_id,
+        content: row.content,
+        createdAt: row.created_at,
+        category: row.category || 'miscellaneous',
+      })
+    );
+    setThoughts(mapped);
+    setThoughtError(null);
+  }, []);
+
+  useEffect(() => {
+    fetchThoughts();
+  }, [fetchThoughts, currentUser]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, user_email');
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error loading profiles from Supabase', error);
+        return;
+      }
+      setUsers(data || []);
+    };
+    fetchProfiles();
+  }, []);
+
+  const mergeProfile = (profile) => {
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === profile.id);
+      return exists ? prev.map((u) => (u.id === profile.id ? { ...u, ...profile } : u)) : [...prev, profile];
+    });
+  };
+
+  const ensureProfile = useCallback(
+    async (user) => {
+      if (!user) return null;
+      const baseProfile = profileFromUser(user);
+      if (!supabase) {
+        mergeProfile(baseProfile);
+        setCurrentUser(baseProfile);
+        return baseProfile;
+      }
+      const { data: ensured, error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: baseProfile.id,
+          username: baseProfile.username,
+          display_name: baseProfile.display_name,
+          user_email: baseProfile.user_email,
+        })
+        .select('id, username, display_name, user_email')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error ensuring profile', error);
+        mergeProfile(baseProfile);
+        setCurrentUser(baseProfile);
+        return baseProfile;
+      }
+      mergeProfile(ensured);
+      setCurrentUser(ensured);
+      return ensured;
+    },
+    [supabase, mergeProfile]
+  );
+
+  useEffect(() => {
+    const syncSession = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error getting session', error);
+        return;
+      }
+      const sessionUser = data?.session?.user;
+      if (sessionUser) {
+        await ensureProfile(sessionUser);
+        if (location.pathname === '/login') {
+          navigate('/');
+        }
+      }
+    };
+    syncSession();
+    const { data: listener } = supabase?.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await ensureProfile(session.user);
+        if (location.pathname === '/login') {
+          navigate('/');
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    }) || {};
+    return () => {
+      listener?.subscription?.unsubscribe();
+    };
+  }, []);
+
   const getDisplayName = (userId) => {
     const user = userDirectory[userId];
-    if (!user) return userId;
-    const composite = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-    return composite || user.username || userId;
+    if (!user) return 'Anonymous';
+    return user.display_name || user.username || user.user_email || 'Anonymous';
+  };
+
+  const getCategoryLabel = (slug) => {
+    if (!slug) return 'Uncategorized';
+    const lowered = slug.toLowerCase();
+    if (CATEGORY_LABELS[lowered]) return CATEGORY_LABELS[lowered];
+    return lowered
+      .split('_')
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join(' ');
   };
 
   const thoughtsTodayCount = currentUser
@@ -187,58 +324,102 @@ function AppShell() {
       ).length
     : 0;
 
-  const handleLogin = (name) => {
-    const trimmed = name.trim();
+  const handleLogin = async (identifier) => {
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!supabase) {
+      setAuthError('Supabase client not configured.');
+      return;
+    }
+    const trimmed = identifier.trim().toLowerCase();
     if (!trimmed) return;
-    const id = trimmed.toLowerCase().replace(/\s+/g, '-');
-    const existing = users.find((user) => user.id === id);
-    const newUser = existing || {
-      id,
-      username: trimmed,
-      firstName: '',
-      lastName: '',
-      email: '',
-    };
-    setUsers((prev) => {
-      const exists = prev.some((user) => user.id === id);
-      return exists ? prev : [...prev, newUser];
+
+    const emailRedirectTo = 'http://localhost:3000';
+    const email = trimmed;
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo,
+        shouldCreateUser: true,
+      },
     });
-    setCurrentUser(newUser);
-    navigate('/');
+    if (error) {
+      setAuthError(error.message || 'Unable to send login link.');
+      return;
+    }
+    setAuthNotice('Check your email for a login link to continue.');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     navigate('/login');
+    supabase?.auth?.signOut().catch(() => {});
   };
 
-  const addThought = ({ content, category, linkedPositionId = null, replyToThoughtId = null }) => {
+  const addThought = async ({ content, category, linkedPositionId = null, replyToThoughtId = null }) => {
     if (!currentUser) return null;
+    const ensuredUser = await ensureProfile(currentUser);
+    const authorId = ensuredUser?.id || currentUser.id;
     const todayCount = thoughts.filter(
-      (thought) => thought.authorId === currentUser.id && isSameDay(thought.createdAt, new Date())
+      (thought) => thought.authorId === authorId && isSameDay(thought.createdAt, new Date())
     ).length;
     if (todayCount >= THOUGHTS_PER_DAY) return null;
     if (!category) return null;
-    const newThought = createThought({
-      authorId: currentUser.id,
+    const categorySlug = slugifyCategory(category);
+    try {
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('thoughts')
+          .insert({
+            author_id: authorId,
+            content,
+            category: categorySlug,
+          })
+          .select('id, author_id, content, created_at, category')
+          .single();
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error inserting thought', error);
+          return null;
+        }
+        const newThought = createThought({
+          id: data.id,
+          authorId: data.author_id,
+          content: data.content,
+          createdAt: data.created_at,
+          linkedPositionId,
+          replyToThoughtId,
+          category: data.category || categorySlug,
+        });
+        setThoughts((prev) => [newThought, ...prev]);
+        return newThought.id;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Unexpected error inserting thought', err);
+    }
+    const fallbackThought = createThought({
+      authorId: authorId,
       content,
       linkedPositionId,
       replyToThoughtId,
-      category,
+      category: categorySlug,
     });
-    setThoughts((prev) => [...prev, newThought]);
-    return newThought.id;
+    setThoughts((prev) => [fallbackThought, ...prev]);
+    return fallbackThought.id;
   };
 
-  const addPosition = ({ thesis, definitions = [], sources = [], category }) => {
+  const addPosition = async ({ thesis, definitions = [], sources = [], category }) => {
     if (!currentUser) return null;
+    const ensuredUser = await ensureProfile(currentUser);
+    const authorId = ensuredUser?.id || currentUser.id;
     const todayCount = positions.filter(
-      (position) => position.authorId === currentUser.id && isSameDay(position.createdAt, new Date())
+      (position) => position.authorId === authorId && isSameDay(position.createdAt, new Date())
     ).length;
     if (todayCount >= POSITIONS_PER_DAY) return null;
     if (!category) return null;
     const newPosition = createPosition({
-      authorId: currentUser.id,
+      authorId,
       thesis,
       definitions,
       sources,
@@ -248,11 +429,12 @@ function AppShell() {
     return newPosition.id;
   };
 
-  const startDebate = (positionId) => {
+  const startDebate = async (positionId) => {
     if (!currentUser) return null;
+    const ensuredUser = await ensureProfile(currentUser);
     const newDebate = createDebate({
       positionId,
-      affirmativeUserId: currentUser.id,
+      affirmativeUserId: ensuredUser?.id || currentUser.id,
       negativeUserId: 'tbd-opponent',
       status: DEBATE_STATUS.ACTIVE,
       challengeStatus: 'accepted',
@@ -261,11 +443,12 @@ function AppShell() {
     return newDebate.id;
   };
 
-  const createChallenge = ({ positionId, opening, opposingPosition, definitions }) => {
+  const createChallenge = async ({ positionId, opening, opposingPosition, definitions }) => {
     if (!currentUser) return null;
+    const ensuredUser = await ensureProfile(currentUser);
     const newDebate = createDebate({
       positionId,
-      affirmativeUserId: currentUser.id,
+      affirmativeUserId: ensuredUser?.id || currentUser.id,
       negativeUserId: positions.find((p) => p.id === positionId)?.authorId || 'unknown',
       status: DEBATE_STATUS.SCHEDULED,
       challengeStatus: 'pending',
@@ -340,12 +523,22 @@ function AppShell() {
     }));
   };
 
-  const updateUserProfile = (id, updates) => {
+  const updateUserProfile = async (id, updates) => {
     setUsers((prev) =>
       prev.map((user) => (user.id === id ? { ...user, ...updates } : user))
     );
     if (currentUser?.id === id) {
       setCurrentUser((prev) => ({ ...prev, ...updates }));
+    }
+    if (supabase) {
+      await supabase
+        .from('profiles')
+        .upsert({
+          id,
+          username: updates.username,
+          display_name: updates.display_name,
+          user_email: updates.user_email,
+        });
     }
   };
 
@@ -366,7 +559,7 @@ function AppShell() {
               currentUser ? (
                 <Navigate to="/" replace />
               ) : (
-                <LoginScreen onLogin={handleLogin} />
+                <LoginScreen onLogin={handleLogin} error={authError} notice={authNotice} />
               )
             }
           />
@@ -376,10 +569,12 @@ function AppShell() {
               currentUser ? (
                 <HomeScreen
                   thoughts={thoughts}
+                  thoughtError={thoughtError}
                   positions={positions}
                   debates={debates}
                   users={userDirectory}
                   getDisplayName={getDisplayName}
+                  getCategoryLabel={getCategoryLabel}
                   onAddThought={(content, category) => addThought({ content, category })}
                   onAddPosition={(thesis, defs, srcs, category) =>
                     addPosition({ thesis, definitions: defs, sources: srcs, category })
@@ -404,12 +599,12 @@ function AppShell() {
                   debates={debates}
                   users={userDirectory}
                   getDisplayName={getDisplayName}
-                  onStartDebate={(positionId) => {
-                    const newId = startDebate(positionId);
+                  onStartDebate={async (positionId) => {
+                    const newId = await startDebate(positionId);
                     if (newId) navigate(`/debates/${newId}`);
                   }}
-                  onChallenge={(positionId, data) => {
-                    const newId = createChallenge({ positionId, ...data });
+                  onChallenge={async (positionId, data) => {
+                    const newId = await createChallenge({ positionId, ...data });
                     if (newId) navigate(`/debates/${newId}`);
                   }}
                   categories={CATEGORY_OPTIONS}
@@ -488,6 +683,8 @@ function AppShell() {
                   positions={positions}
                   debates={debates}
                   getDisplayName={getDisplayName}
+                  thoughtError={thoughtError}
+                  getCategoryLabel={getCategoryLabel}
                 />
               ) : (
                 <Navigate to="/login" replace />

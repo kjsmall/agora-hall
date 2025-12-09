@@ -31,7 +31,7 @@ export function createThought({
   createdAt = new Date().toISOString(),
   linkedPositionId = null,
   replyToThoughtId = null,
-  category = 'Miscellaneous',
+  category = 'miscellaneous',
 }) {
   return { id, authorId, content, createdAt, linkedPositionId, replyToThoughtId, category };
 }

@@ -168,10 +168,10 @@ export default function PositionScreen({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const wordCount = opening.trim().split(/\s+/).filter(Boolean).length;
                     if (!opposingPosition.trim() || !opening.trim() || wordCount > 2500 || !category) return;
-                    const id = onChallenge(position.id, {
+                    const id = await onChallenge(position.id, {
                       opening: opening.trim(),
                       opposingPosition: opposingPosition.trim(),
                       definitions,

@@ -9,27 +9,27 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
   const participatedDebates = debates.filter(
     (d) => d.affirmativeUserId === userId || d.negativeUserId === userId
   );
-  const [firstName, setFirstName] = useState(user?.firstName || '');
-  const [lastName, setLastName] = useState(user?.lastName || '');
-  const [email, setEmail] = useState(user?.email || '');
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
+  const [username, setUsername] = useState(user?.username || '');
+  const [email, setEmail] = useState(user?.user_email || '');
 
   useEffect(() => {
     if (!user) return;
-    setFirstName(user.firstName || '');
-    setLastName(user.lastName || '');
-    setEmail(user.email || '');
+    setDisplayName(user.display_name || '');
+    setUsername(user.username || '');
+    setEmail(user.user_email || '');
   }, [user]);
 
   const isOwner = currentUser?.id === userId;
 
   const hasChanges =
-    firstName !== (user.firstName || '') ||
-    lastName !== (user.lastName || '') ||
-    email !== (user.email || '');
+    displayName !== (user.display_name || '') ||
+    username !== (user.username || '') ||
+    email !== (user.user_email || '');
 
   const handleSave = () => {
     if (!isOwner || !hasChanges) return;
-    onUpdateUser(userId, { firstName, lastName, email });
+    onUpdateUser(userId, { display_name: displayName, username, user_email: email });
   };
 
   if (!user) {
@@ -43,21 +43,21 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
         <h1 className="text-2xl font-semibold text-slate-50 mt-1">Username: {user.username}</h1>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-400 uppercase">First Name</label>
+            <label className="text-xs text-slate-400 uppercase">Display Name</label>
             <input
               type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
               disabled={!isOwner}
               className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400 uppercase">Last Name</label>
+            <label className="text-xs text-slate-400 uppercase">Username</label>
             <input
               type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={!isOwner}
               className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
             />
