@@ -4,6 +4,10 @@ import { useParams } from 'react-router-dom';
 export default function ProfileScreen({ users, thoughts, positions, debates, currentUser, onUpdateUser }) {
   const { userId } = useParams();
   const user = users[userId];
+  const positionDirectory = positions.reduce((acc, pos) => {
+    acc[pos.id] = pos;
+    return acc;
+  }, {});
   const authoredThoughts = thoughts.filter((t) => t.authorId === userId);
   const authoredPositions = positions.filter((p) => p.authorId === userId);
   const participatedDebates = debates.filter(
@@ -123,7 +127,9 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
             <p className="text-xs text-slate-500">
               {debate.status === 'active' ? 'Active' : 'Resolved'} · {new Date(debate.createdAt).toLocaleString()}
             </p>
-            <p className="text-slate-100 mt-2">Debate on position {debate.positionId}</p>
+            <p className="text-slate-100 mt-2">
+              Debate on position {positionDirectory[debate.positionId]?.thesis || debate.positionId}
+            </p>
             <p className="text-xs text-slate-500 mt-1">
               Role: {debate.affirmativeUserId === userId ? 'Affirmative' : 'Negative'}
             </p>

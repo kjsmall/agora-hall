@@ -18,6 +18,12 @@ export default function Header({ currentUser, onLogout }) {
           Explore
         </Link>
         <Link
+          to="/people"
+          className="text-slate-200 hover:text-white transition-colors"
+        >
+          People
+        </Link>
+        <Link
           to={`/profile/${currentUser.id}`}
           className="text-slate-200 hover:text-white transition-colors"
         >

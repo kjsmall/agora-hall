@@ -48,7 +48,9 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
       .slice(0, 20);
   }, [thoughts, positions]);
 
-  const activeDebates = debates.filter((d) => d.status === DEBATE_STATUS.ACTIVE).slice(0, 4);
+  const activeDebates = debates
+    .filter((d) => d.status !== DEBATE_STATUS.RESOLVED)
+    .slice(0, 4);
 
   return (
     <div className="space-y-8">

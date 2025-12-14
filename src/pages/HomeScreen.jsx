@@ -37,7 +37,8 @@ export default function HomeScreen({
     acc[pos.id] = pos;
     return acc;
   }, {});
-  const activeDebates = debates.filter((debate) => debate.status === DEBATE_STATUS.ACTIVE);
+  // Treat any non-resolved debate (active or scheduled) as active for display.
+  const activeDebates = debates.filter((debate) => debate.status !== DEBATE_STATUS.RESOLVED);
   const resolvedDebates = debates.filter((debate) => debate.status === DEBATE_STATUS.RESOLVED);
 
   const handleThoughtSubmit = async () => {

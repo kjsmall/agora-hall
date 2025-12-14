@@ -92,6 +92,8 @@ export function createDebateTurn({
   authorId,
   content,
   createdAt = new Date().toISOString(),
+  kind = 'round',
+  roundNumber = null,
 }) {
-  return { id, debateId, turnNumber, authorId, content, createdAt };
+  return { id, debateId, turnNumber, authorId, content, createdAt, kind, roundNumber };
 }

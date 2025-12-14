@@ -147,18 +147,12 @@ export default function PositionScreen({
                 )}
               </div>
               <div>
-                <label className="text-xs text-slate-400 uppercase">Category</label>
-                <select
+                <label className="text-xs text-slate-400 uppercase">Category (locked to position)</label>
+                <input
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                  disabled
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none"
+                />
               </div>
               <div className="flex justify-end gap-3">
                 <button

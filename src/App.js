@@ -13,6 +13,7 @@ import DebateScreen from './pages/DebateScreen';
 import ProfileScreen from './pages/ProfileScreen';
 import ThoughtScreen from './pages/ThoughtScreen';
 import ExploreScreen from './pages/ExploreScreen';
+import PeopleScreen from './pages/PeopleScreen';
 import Header from './components/Header';
 import { CATEGORY_OPTIONS, DEBATE_STATUS, createDebate, createDebateTurn, createPosition, createThought } from './utils/domainModels';
 import { supabase } from './utils/supabaseClient';
@@ -74,40 +75,8 @@ function AppShell() {
   const [positions, setPositions] = useState([]);
   const [debates, setDebates] = useState([]);
 
-  const [turns, setTurns] = useState([
-    createDebateTurn({
-      id: 'turn1',
-      debateId: 'd1',
-      turnNumber: 1,
-      authorId: 'alex',
-      content: 'We cannot spar about truth until we pin what truth means here.',
-      createdAt: '2024-03-12T10:05:00Z',
-    }),
-    createDebateTurn({
-      id: 'turn2',
-      debateId: 'd1',
-      turnNumber: 2,
-      authorId: 'riley',
-      content: 'Definitions can be weaponized; truth emerges in testing claims.',
-      createdAt: '2024-03-12T10:12:00Z',
-    }),
-    createDebateTurn({
-      id: 'turn3',
-      debateId: 'd2',
-      turnNumber: 1,
-      authorId: 'marco',
-      content: 'Liberty must sit on duty; otherwise participation collapses.',
-      createdAt: '2024-02-01T15:10:00Z',
-    }),
-    createDebateTurn({
-      id: 'turn4',
-      debateId: 'd2',
-      turnNumber: 2,
-      authorId: 'sofia',
-      content: 'Duty without liberty calcifies into control; balance matters.',
-      createdAt: '2024-02-01T15:15:00Z',
-    }),
-  ]);
+  const [turns, setTurns] = useState([]);
+  const [debateVotes, setDebateVotes] = useState({});
 
   const navigate = useNavigate();
   const userDirectory = useMemo(
@@ -170,7 +139,9 @@ function AppShell() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('debates')
-      .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
+      .select(
+        'id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds, current_round, current_turn_profile_id, forfeited_by_profile_id, forfeit_reason'
+      )
       .order('created_at', { ascending: false });
     if (error) {
       // eslint-disable-next-line no-console
@@ -178,29 +149,52 @@ function AppShell() {
       setDebateError(error.message || 'Unable to load debates.');
       return;
     }
-    const mapped = (data || []).map((row) => ({
-      id: row.id,
-      positionId: row.position_id,
-      affirmativeUserId: row.initiator_user_id,
-      negativeUserId: row.respondent_user_id,
-      status: row.status || DEBATE_STATUS.SCHEDULED,
-      createdAt: row.created_at,
-      resolvedAt: row.resolved_at,
-      winnerUserId: row.winner_user_id || null,
-      maxRounds: row.max_rounds || 10,
-      // Client-only fields
-      challengeStatus: 'accepted',
-      challengerOpening: '',
-      challengeeOpening: '',
-      opposingPosition: '',
-      challengeDefinitions: [],
-      closingChallenger: '',
-      closingOpponent: '',
-      votes: { challenger: 0, challengee: 0, neither: 0 },
-    }));
-    setDebates(mapped);
+    const mapped = (data || []).map((row) => {
+      const normalizedStatus =
+        row.status === 'completed'
+          ? DEBATE_STATUS.RESOLVED
+          : row.status === 'active'
+          ? DEBATE_STATUS.ACTIVE
+          : row.status === 'pending'
+          ? 'pending'
+          : row.status || DEBATE_STATUS.SCHEDULED;
+      return {
+        id: row.id,
+        positionId: row.position_id,
+        affirmativeUserId: row.initiator_user_id,
+        negativeUserId: row.respondent_user_id,
+        status: normalizedStatus,
+        createdAt: row.created_at,
+        resolvedAt: row.resolved_at,
+        winnerUserId: row.winner_user_id || null,
+        maxRounds: row.max_rounds || 10,
+        currentRound: row.current_round || 0,
+        currentTurnProfileId: row.current_turn_profile_id || null,
+        forfeitedByProfileId: row.forfeited_by_profile_id || null,
+        forfeitReason: row.forfeit_reason || null,
+        // Client-only fields
+        challengeStatus: normalizedStatus === 'pending' ? 'pending' : 'accepted',
+        challengerOpening: '',
+        challengeeOpening: '',
+        opposingPosition: '',
+        challengeDefinitions: [],
+        closingChallenger: '',
+        closingOpponent: '',
+        votes: debateVotes[row.id] || { challenger: 0, challengee: 0, neither: 0 },
+      };
+    });
+    setDebates((prev) => {
+      const prevMap = prev.reduce((acc, d) => ({ ...acc, [d.id]: d }), {});
+      return mapped.map((d) => ({
+        ...d,
+        opposingPosition: prevMap[d.id]?.opposingPosition || d.opposingPosition,
+        challengeDefinitions: prevMap[d.id]?.challengeDefinitions || d.challengeDefinitions,
+        challengerOpening: prevMap[d.id]?.challengerOpening || d.challengerOpening,
+        challengeeOpening: prevMap[d.id]?.challengeeOpening || d.challengeeOpening,
+      }));
+    });
     setDebateError(null);
-  }, []);
+  }, [debateVotes]);
 
   useEffect(() => {
     if (currentUser) {
@@ -225,6 +219,71 @@ function AppShell() {
       setDebates([]);
     }
   }, [currentUser, fetchDebates]);
+
+  const fetchDebateTurns = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('debate_turns')
+      .select('id, debate_id, author_id, kind, round_number, content, created_at')
+      .order('created_at', { ascending: true });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading debate turns from Supabase', error);
+      return;
+    }
+    const mapped = (data || []).map((row) =>
+      createDebateTurn({
+        id: row.id,
+        debateId: row.debate_id,
+        authorId: row.author_id,
+        turnNumber: row.kind === 'round' ? row.round_number || 0 : 0,
+        content: row.content,
+        createdAt: row.created_at,
+        kind: row.kind,
+        roundNumber: row.round_number,
+      })
+    );
+    setTurns(mapped);
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchDebateTurns();
+    } else {
+      setTurns([]);
+    }
+  }, [currentUser, fetchDebateTurns]);
+
+  const fetchDebateVotes = useCallback(async () => {
+    if (!supabase) return {};
+    const { data, error } = await supabase
+      .from('debate_votes')
+      .select('debate_id, side');
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading debate votes', error);
+      return {};
+    }
+    const aggregates = {};
+    (data || []).forEach((vote) => {
+      if (!aggregates[vote.debate_id]) {
+        aggregates[vote.debate_id] = { challenger: 0, challengee: 0, neither: 0 };
+      }
+      if (vote.side === 'initiator') aggregates[vote.debate_id].challenger += 1;
+      else if (vote.side === 'respondent') aggregates[vote.debate_id].challengee += 1;
+      else aggregates[vote.debate_id].neither += 1;
+    });
+    setDebateVotes(aggregates);
+    return aggregates;
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchDebateVotes();
+    } else {
+      setDebateVotes({});
+    }
+  }, [currentUser, fetchDebateVotes]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -505,7 +564,7 @@ function AppShell() {
           position_id: positionId,
           initiator_user_id: initiatorId,
           respondent_user_id: null,
-          status: DEBATE_STATUS.ACTIVE,
+          status: 'active',
         })
         .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
         .single();
@@ -551,6 +610,10 @@ function AppShell() {
     const ensuredUser = await ensureProfile(currentUser);
     const initiatorId = ensuredUser?.id || currentUser.id;
     const respondentId = positions.find((p) => p.id === positionId)?.authorId || null;
+    if (respondentId && respondentId === initiatorId) {
+      setDebateError('You cannot challenge your own position.');
+      return null;
+    }
     if (supabase) {
       const { data, error } = await supabase
         .from('debates')
@@ -558,7 +621,9 @@ function AppShell() {
           position_id: positionId,
           initiator_user_id: initiatorId,
           respondent_user_id: respondentId,
-          status: DEBATE_STATUS.SCHEDULED,
+          status: 'pending',
+          current_round: 0,
+          current_turn_profile_id: respondentId,
         })
         .select('id, position_id, initiator_user_id, respondent_user_id, status, created_at, resolved_at, winner_user_id, max_rounds')
         .single();
@@ -567,12 +632,36 @@ function AppShell() {
         console.error('Error creating challenge debate', error);
         return null;
       }
+      // Insert challenger opening into debate_turns
+      const { data: openingTurn } = await supabase
+        .from('debate_turns')
+        .insert({
+          debate_id: data.id,
+          author_id: initiatorId,
+          kind: 'opening',
+          content: opening,
+        })
+        .select('id, debate_id, author_id, kind, round_number, content, created_at')
+        .single();
+      if (openingTurn) {
+        const newTurn = createDebateTurn({
+          id: openingTurn.id,
+          debateId: openingTurn.debate_id,
+          authorId: openingTurn.author_id,
+          content: openingTurn.content,
+          createdAt: openingTurn.created_at,
+          kind: openingTurn.kind,
+          roundNumber: openingTurn.round_number,
+          turnNumber: openingTurn.round_number || 0,
+        });
+        setTurns((prev) => [...prev, newTurn]);
+      }
       const mapped = {
         id: data.id,
         positionId: data.position_id,
         affirmativeUserId: data.initiator_user_id,
         negativeUserId: data.respondent_user_id,
-        status: data.status || DEBATE_STATUS.SCHEDULED,
+        status: data.status || 'pending',
         createdAt: data.created_at,
         resolvedAt: data.resolved_at,
         winnerUserId: data.winner_user_id,
@@ -584,7 +673,9 @@ function AppShell() {
         challengeDefinitions: definitions || [],
         closingChallenger: '',
         closingOpponent: '',
-        votes: { challenger: 0, challengee: 0, neither: 0 },
+        votes: debateVotes[data.id] || { challenger: 0, challengee: 0, neither: 0 },
+        currentRound: 0,
+        currentTurnProfileId: respondentId,
       };
       setDebates((prev) => [mapped, ...prev]);
       return mapped.id;
@@ -603,19 +694,78 @@ function AppShell() {
     return newDebate.id;
   };
 
-  const addTurn = (debateId, authorId, content) => {
-    setTurns((prev) => {
-      const relevant = prev.filter((t) => t.debateId === debateId);
-      const nextTurnNumber = relevant.length + 1;
-      if (nextTurnNumber > 10) return prev;
+  const addTurn = async (debateId, authorId, content) => {
+    const debate = debates.find((d) => d.id === debateId);
+    if (!debate || debate.status !== DEBATE_STATUS.ACTIVE) return;
+    if (debate.currentTurnProfileId && debate.currentTurnProfileId !== authorId) return;
+    const currentRound = debate.currentRound || 0;
+    const roundNumber = currentRound + 1;
+    const roundTurns = turns.filter((t) => t.debateId === debateId && t.kind === 'round' && (t.roundNumber || t.turnNumber) === roundNumber);
+    if (roundNumber > debate.maxRounds) return;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('debate_turns')
+        .insert({
+          debate_id: debateId,
+          author_id: authorId,
+          kind: 'round',
+          round_number: roundNumber,
+          content,
+        })
+        .select('id, debate_id, author_id, kind, round_number, content, created_at')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error inserting debate turn', error);
+        return;
+      }
       const newTurn = createDebateTurn({
+        id: data.id,
         debateId,
         authorId,
-        turnNumber: nextTurnNumber,
-        content,
+        turnNumber: data.round_number || roundNumber,
+        content: data.content,
+        createdAt: data.created_at,
+        kind: data.kind,
+        roundNumber: data.round_number,
       });
-      return [...prev, newTurn];
-    });
+      setTurns((prev) => [...prev, newTurn]);
+
+      // Determine next turn assignment
+      const authorsThisRound = new Set([...roundTurns.map((t) => t.authorId), authorId]);
+      let nextCurrentRound = debate.currentRound || 0;
+      let nextTurnProfileId = debate.currentTurnProfileId;
+      if (authorsThisRound.size < 2) {
+        // Switch to the other participant for same round
+        nextTurnProfileId = authorId === debate.affirmativeUserId ? debate.negativeUserId : debate.affirmativeUserId;
+      } else {
+        // Both sides spoke for this round
+        nextCurrentRound = roundNumber;
+        if (nextCurrentRound >= debate.maxRounds) {
+          // Move to closings: challenger first
+          nextTurnProfileId = debate.affirmativeUserId;
+        } else {
+          // Next round starts with challenger
+          nextTurnProfileId = debate.affirmativeUserId;
+        }
+      }
+      setDebates((prev) =>
+        prev.map((d) =>
+          d.id === debateId
+            ? {
+                ...d,
+                currentRound: nextCurrentRound,
+                currentTurnProfileId: nextTurnProfileId,
+              }
+            : d
+        )
+      );
+      await supabase
+        .from('debates')
+        .update({ current_round: nextCurrentRound, current_turn_profile_id: nextTurnProfileId })
+        .eq('id', debateId);
+      return;
+    }
   };
 
   const updateDebate = (debateId, updater) => {
@@ -628,11 +778,44 @@ function AppShell() {
     );
   };
 
-  const acceptChallenge = (debateId, opening) => {
+  const acceptChallenge = async (debateId, opening) => {
+    const debate = debates.find((d) => d.id === debateId);
+    if (!debate) return;
+    if (supabase) {
+      await supabase
+        .from('debates')
+        .update({ status: 'active', current_round: 0, current_turn_profile_id: debate.affirmativeUserId })
+        .eq('id', debateId);
+      const { data: openingTurn } = await supabase
+        .from('debate_turns')
+        .insert({
+          debate_id: debateId,
+          author_id: debate.negativeUserId,
+          kind: 'opening',
+          content: opening,
+        })
+        .select('id, debate_id, author_id, kind, round_number, content, created_at')
+        .single();
+      if (openingTurn) {
+        const newTurn = createDebateTurn({
+          id: openingTurn.id,
+          debateId: openingTurn.debate_id,
+          authorId: openingTurn.author_id,
+          content: openingTurn.content,
+          createdAt: openingTurn.created_at,
+          kind: openingTurn.kind,
+          roundNumber: openingTurn.round_number,
+          turnNumber: openingTurn.round_number || 0,
+        });
+        setTurns((prev) => [...prev, newTurn]);
+      }
+    }
     updateDebate(debateId, {
       challengeStatus: 'accepted',
       status: DEBATE_STATUS.ACTIVE,
       challengeeOpening: opening,
+      currentRound: 0,
+      currentTurnProfileId: debate.affirmativeUserId,
     });
   };
 
@@ -640,24 +823,107 @@ function AppShell() {
     updateDebate(debateId, { challengeStatus: 'rejected' });
   };
 
-  const submitClosing = (debateId, role, text) => {
-    updateDebate(debateId, (debate) => {
+  const submitClosing = async (debateId, role, text) => {
+    const debate = debates.find((d) => d.id === debateId);
+    if (!debate) return;
+    const authorId = role === 'challenger' ? debate.affirmativeUserId : debate.negativeUserId;
+    if (debate.currentTurnProfileId && debate.currentTurnProfileId !== authorId) return;
+    if (supabase) {
+      await supabase.from('debate_turns').insert({
+        debate_id: debateId,
+        author_id: authorId,
+        kind: 'closing',
+        content: text,
+      });
+    }
+    updateDebate(debateId, (prevDebate) => {
       const updates =
         role === 'challenger'
           ? { closingChallenger: text }
           : { closingOpponent: text };
       const bothHave =
-        (role === 'challenger' ? text : debate.closingChallenger) &&
-        (role === 'challengee' ? text : debate.closingOpponent);
+        (role === 'challenger' ? text : prevDebate.closingChallenger) &&
+        (role === 'challengee' ? text : prevDebate.closingOpponent);
+      const nextTurnProfileId = role === 'challenger' ? prevDebate.negativeUserId : null;
+      if (bothHave && supabase) {
+        supabase
+          .from('debates')
+          .update({
+            status: 'completed',
+            resolved_at: new Date().toISOString(),
+            current_turn_profile_id: null,
+          })
+          .eq('id', debateId);
+      } else if (supabase) {
+        supabase
+          .from('debates')
+          .update({ current_turn_profile_id: nextTurnProfileId })
+          .eq('id', debateId);
+      }
       return {
         ...updates,
-        status: bothHave ? DEBATE_STATUS.RESOLVED : debate.status,
-        resolvedAt: bothHave ? new Date().toISOString() : debate.resolvedAt,
+        status: bothHave ? DEBATE_STATUS.RESOLVED : prevDebate.status,
+        resolvedAt: bothHave ? new Date().toISOString() : prevDebate.resolvedAt,
+        currentTurnProfileId: nextTurnProfileId,
+        winnerUserId: bothHave ? null : prevDebate.winnerUserId,
       };
     });
   };
 
-  const voteDebate = (debateId, choice) => {
+  const forfeitDebate = async (debateId, forfeiterId) => {
+    const debate = debates.find((d) => d.id === debateId);
+    if (!debate) return;
+    const winnerUserId = forfeiterId === debate.affirmativeUserId ? debate.negativeUserId : debate.affirmativeUserId;
+    if (supabase) {
+      await supabase
+        .from('debates')
+        .update({
+          status: 'completed',
+          resolved_at: new Date().toISOString(),
+          winner_user_id: winnerUserId,
+          forfeited_by_profile_id: forfeiterId,
+          forfeit_reason: 'forfeit',
+          current_turn_profile_id: null,
+        })
+        .eq('id', debateId);
+    }
+    updateDebate(debateId, {
+      status: DEBATE_STATUS.RESOLVED,
+      resolvedAt: new Date().toISOString(),
+      winnerUserId,
+      forfeitedByProfileId: forfeiterId,
+      forfeitReason: 'forfeit',
+      currentTurnProfileId: null,
+    });
+  };
+
+  const voteDebate = async (debateId, choice) => {
+    if (!currentUser) return;
+    const side =
+      choice === 'challenger' ? 'initiator' : choice === 'challengee' ? 'respondent' : 'draw';
+    if (supabase) {
+      const { error } = await supabase
+        .from('debate_votes')
+        .upsert({
+          debate_id: debateId,
+          voter_profile_id: currentUser.id,
+          side,
+        });
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error voting on debate', error);
+        return;
+      }
+      const aggregates = await fetchDebateVotes();
+      setDebates((prev) =>
+        prev.map((debate) =>
+          debate.id === debateId
+            ? { ...debate, votes: aggregates[debateId] || debate.votes }
+            : debate
+        )
+      );
+      return;
+    }
     updateDebate(debateId, (debate) => ({
       votes: {
         ...debate.votes,
@@ -796,6 +1062,7 @@ function AppShell() {
                   onRejectChallenge={rejectChallenge}
                   onSubmitClosing={submitClosing}
                   onVote={voteDebate}
+                  onForfeit={forfeitDebate}
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -831,6 +1098,22 @@ function AppShell() {
                   thoughtError={thoughtError}
                   positionError={positionError}
                   debateError={debateError}
+                  getCategoryLabel={getCategoryLabel}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/people"
+            element={
+              currentUser ? (
+                <PeopleScreen
+                  users={users}
+                  thoughts={thoughts}
+                  positions={positions}
+                  debates={debates}
                   getCategoryLabel={getCategoryLabel}
                 />
               ) : (
