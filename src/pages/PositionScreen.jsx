@@ -195,6 +195,9 @@ export default function PositionScreen({
             <p className="text-slate-400 text-sm">
               Each debate is contained—no subrooms or branches.
             </p>
+            {position.fromThoughtId && (
+              <p className="text-xs text-slate-500 mt-1">Originated as a Thought.</p>
+            )}
           </div>
           <Link
             to={fromExplore ? "/explore" : "/"}

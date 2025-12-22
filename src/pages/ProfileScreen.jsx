@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 
 export default function ProfileScreen({ users, thoughts, positions, debates, currentUser, onUpdateUser }) {
@@ -104,6 +105,14 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
             <p className="text-xs text-slate-500">{new Date(thought.createdAt).toLocaleString()}</p>
             <h3 className="text-lg font-semibold text-slate-50 mt-1">{thought.title || 'Untitled'}</h3>
             <p className="text-slate-100 mt-1">{thought.content}</p>
+            {isOwner && !thought.isPromoted && (
+              <Link
+                to={`/thoughts/${thought.id}`}
+                className="text-xs text-cyan-300 hover:text-white"
+              >
+                Convert to Position
+              </Link>
+            )}
           </div>
         ))}
       </ProfileSection>

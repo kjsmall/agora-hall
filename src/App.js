@@ -92,7 +92,8 @@ function AppShell() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('thoughts')
-      .select('id, author_id, title, content, created_at, category')
+      .select('id, author_id, title, content, created_at, category, is_promoted')
+      .eq('is_promoted', false)
       .order('created_at', { ascending: false });
     if (error) {
       // eslint-disable-next-line no-console
@@ -108,6 +109,7 @@ function AppShell() {
         content: row.content,
         createdAt: row.created_at,
         category: row.category || 'miscellaneous',
+        isPromoted: row.is_promoted || false,
       })
     );
     setThoughts(mapped);
@@ -531,10 +533,11 @@ function AppShell() {
           .insert({
             author_id: authorId,
             title: safeTitle,
-            content,
+            content: body,
             category: categorySlug,
+            is_promoted: false,
           })
-          .select('id, author_id, title, content, created_at, category')
+          .select('id, author_id, title, content, created_at, category, is_promoted')
           .single();
         if (error) {
           // eslint-disable-next-line no-console
@@ -550,6 +553,7 @@ function AppShell() {
           linkedPositionId,
           replyToThoughtId,
           category: data.category || categorySlug,
+          isPromoted: data.is_promoted || false,
         });
         setThoughts((prev) => [newThought, ...prev]);
         return newThought.id;
@@ -565,6 +569,7 @@ function AppShell() {
       linkedPositionId,
       replyToThoughtId,
       category: categorySlug,
+      isPromoted: false,
     });
     setThoughts((prev) => [fallbackThought, ...prev]);
     return fallbackThought.id;
@@ -621,6 +626,60 @@ function AppShell() {
     });
     setPositions((prev) => [newPosition, ...prev]);
     return newPosition.id;
+  };
+
+  const convertThoughtToPosition = async ({
+    thoughtId,
+    title,
+    premise,
+    definitions = [],
+    sources = [],
+    category,
+  }) => {
+    if (!currentUser) return null;
+    const ensuredUser = await ensureProfile(currentUser);
+    const authorId = ensuredUser?.id || currentUser.id;
+    const thought = thoughts.find((t) => t.id === thoughtId);
+    const categoryValue = category || thought?.category || 'miscellaneous';
+    const safeTitle = (title || thought?.title || '').trim();
+    const safePremise = (premise || thought?.content || '').trim();
+    if (!safeTitle || !safePremise) return null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('positions')
+        .insert({
+          author_id: authorId,
+          title: safeTitle,
+          premise: safePremise,
+          definitions,
+          sources,
+          category: categoryValue,
+          from_thought_id: thoughtId,
+        })
+        .select('id, author_id, title, premise, definitions, sources, category, created_at, from_thought_id')
+        .single();
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error converting thought', error);
+        return null;
+      }
+      await supabase.from('thoughts').update({ is_promoted: true }).eq('id', thoughtId);
+      const newPosition = {
+        id: data.id,
+        authorId: data.author_id,
+        title: data.title || safeTitle,
+        thesis: data.premise || safePremise,
+        definitions: data.definitions || [],
+        sources: data.sources || [],
+        category: data.category || categoryValue,
+        createdAt: data.created_at,
+        fromThoughtId: data.from_thought_id || thoughtId,
+      };
+      setPositions((prev) => [newPosition, ...prev]);
+      setThoughts((prev) => prev.filter((t) => t.id !== thoughtId));
+      return newPosition.id;
+    }
+    return null;
   };
 
   const startDebate = async (positionId) => {
@@ -1078,6 +1137,7 @@ function AppShell() {
             element={
               currentUser ? (
                 <HomeScreen
+                  currentUser={currentUser}
                   thoughts={thoughts}
                   thoughtError={thoughtError}
                   positionError={positionError}
@@ -1139,6 +1199,7 @@ function AppShell() {
                   thoughtsTodayCount={thoughtsTodayCount}
                   thoughtsLimit={THOUGHTS_PER_DAY}
                   categories={CATEGORY_OPTIONS}
+                  onConvertThought={convertThoughtToPosition}
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -1206,6 +1267,7 @@ function AppShell() {
             element={
               currentUser ? (
                 <ExploreScreen
+                  currentUser={currentUser}
                   thoughts={thoughts}
                   positions={positions}
                   debates={debates}

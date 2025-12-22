@@ -21,6 +21,7 @@ export default function HomeScreen({
   thoughtsLimit,
   positionsLimit,
   categories,
+  currentUser,
 }) {
   const [thoughtDraft, setThoughtDraft] = useState('');
   const [thoughtTitle, setThoughtTitle] = useState('');

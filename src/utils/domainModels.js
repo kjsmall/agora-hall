@@ -33,8 +33,9 @@ export function createThought({
   linkedPositionId = null,
   replyToThoughtId = null,
   category = 'miscellaneous',
+  isPromoted = false,
 }) {
-  return { id, authorId, title, content, createdAt, linkedPositionId, replyToThoughtId, category };
+  return { id, authorId, title, content, createdAt, linkedPositionId, replyToThoughtId, category, isPromoted };
 }
 
 export function createPosition({

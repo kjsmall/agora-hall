@@ -5,7 +5,7 @@ import { CATEGORY_OPTIONS, DEBATE_STATUS } from '../utils/domainModels';
 
 const formatDate = (value) => new Date(value).toLocaleString();
 
-export default function ExploreScreen({ thoughts, positions, debates, getDisplayName, thoughtError, getCategoryLabel, positionError, debateError }) {
+export default function ExploreScreen({ thoughts, positions, debates, getDisplayName, thoughtError, getCategoryLabel, positionError, debateError, currentUser }) {
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [showFilters, setShowFilters] = useState(true);
