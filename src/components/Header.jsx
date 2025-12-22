@@ -24,7 +24,7 @@ export default function Header({ currentUser, onLogout }) {
           People
         </Link>
         <Link
-          to={`/profile/${currentUser.id}`}
+          to={`/profile`}
           className="text-slate-200 hover:text-white transition-colors"
         >
           Profile

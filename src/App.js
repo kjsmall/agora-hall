@@ -11,6 +11,7 @@ import HomeScreen from './pages/HomeScreen';
 import PositionScreen from './pages/PositionScreen';
 import DebateScreen from './pages/DebateScreen';
 import ProfileScreen from './pages/ProfileScreen';
+import PublicProfileScreen from './pages/PublicProfileScreen';
 import ThoughtScreen from './pages/ThoughtScreen';
 import ExploreScreen from './pages/ExploreScreen';
 import PeopleScreen from './pages/PeopleScreen';
@@ -88,7 +89,7 @@ function AppShell() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('thoughts')
-      .select('id, author_id, content, created_at, category')
+      .select('id, author_id, title, content, created_at, category')
       .order('created_at', { ascending: false });
     if (error) {
       // eslint-disable-next-line no-console
@@ -100,6 +101,7 @@ function AppShell() {
       createThought({
         id: row.id,
         authorId: row.author_id,
+        title: row.title || '',
         content: row.content,
         createdAt: row.created_at,
         category: row.category || 'miscellaneous',
@@ -113,7 +115,7 @@ function AppShell() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('positions')
-      .select('id, author_id, premise, definitions, sources, category, created_at, from_thought_id')
+      .select('id, author_id, title, premise, definitions, sources, category, created_at, from_thought_id')
       .order('created_at', { ascending: false });
     if (error) {
       // eslint-disable-next-line no-console
@@ -124,6 +126,7 @@ function AppShell() {
     const mapped = (data || []).map((row) => ({
       id: row.id,
       authorId: row.author_id,
+      title: row.title || '',
       thesis: row.premise || '',
       definitions: row.definitions || [],
       sources: row.sources || [],
@@ -450,15 +453,21 @@ function AppShell() {
     navigate('/login');
   };
 
-  const addThought = async ({ content, category, linkedPositionId = null, replyToThoughtId = null }) => {
+  const addThought = async ({ title, content, category, linkedPositionId = null, replyToThoughtId = null }) => {
     if (!currentUser) return null;
     const ensuredUser = await ensureProfile(currentUser);
     const authorId = ensuredUser?.id || currentUser.id;
+    const body = typeof content === 'string' ? content : String(content || '');
     const todayCount = thoughts.filter(
       (thought) => thought.authorId === authorId && isSameDay(thought.createdAt, new Date())
     ).length;
     if (todayCount >= THOUGHTS_PER_DAY) return null;
-    if (!category) return null;
+    const safeTitle =
+      (title || '').trim() ||
+      body
+        .trim()
+        .slice(0, 80);
+    if (!category || !safeTitle || !body) return null;
     const categorySlug = slugifyCategory(category);
     try {
       if (supabase) {
@@ -466,10 +475,11 @@ function AppShell() {
           .from('thoughts')
           .insert({
             author_id: authorId,
+            title: safeTitle,
             content,
             category: categorySlug,
           })
-          .select('id, author_id, content, created_at, category')
+          .select('id, author_id, title, content, created_at, category')
           .single();
         if (error) {
           // eslint-disable-next-line no-console
@@ -479,6 +489,7 @@ function AppShell() {
         const newThought = createThought({
           id: data.id,
           authorId: data.author_id,
+          title: data.title || safeTitle,
           content: data.content,
           createdAt: data.created_at,
           linkedPositionId,
@@ -494,7 +505,8 @@ function AppShell() {
     }
     const fallbackThought = createThought({
       authorId: authorId,
-      content,
+      title: safeTitle,
+      content: body,
       linkedPositionId,
       replyToThoughtId,
       category: categorySlug,
@@ -503,7 +515,7 @@ function AppShell() {
     return fallbackThought.id;
   };
 
-  const addPosition = async ({ thesis, definitions = [], sources = [], category }) => {
+  const addPosition = async ({ title, thesis, definitions = [], sources = [], category }) => {
     if (!currentUser) return null;
     const ensuredUser = await ensureProfile(currentUser);
     const authorId = ensuredUser?.id || currentUser.id;
@@ -511,18 +523,19 @@ function AppShell() {
       (position) => position.authorId === authorId && isSameDay(position.createdAt, new Date())
     ).length;
     if (todayCount >= POSITIONS_PER_DAY) return null;
-    if (!category) return null;
+    if (!category || !title || !thesis) return null;
     if (supabase) {
       const { data, error } = await supabase
         .from('positions')
         .insert({
           author_id: authorId,
+          title,
           premise: thesis,
           definitions,
           sources,
           category,
         })
-        .select('id, author_id, premise, definitions, sources, category, created_at, from_thought_id')
+        .select('id, author_id, title, premise, definitions, sources, category, created_at, from_thought_id')
         .single();
       if (error) {
         // eslint-disable-next-line no-console
@@ -532,6 +545,7 @@ function AppShell() {
       const newPosition = {
         id: data.id,
         authorId: data.author_id,
+        title: data.title || title,
         thesis: data.premise || '',
         definitions: data.definitions || [],
         sources: data.sources || [],
@@ -544,6 +558,7 @@ function AppShell() {
     }
     const newPosition = createPosition({
       authorId,
+      title,
       thesis,
       definitions,
       sources,
@@ -986,10 +1001,8 @@ function AppShell() {
                   users={userDirectory}
                   getDisplayName={getDisplayName}
                   getCategoryLabel={getCategoryLabel}
-                  onAddThought={(content, category) => addThought({ content, category })}
-                  onAddPosition={(thesis, defs, srcs, category) =>
-                    addPosition({ thesis, definitions: defs, sources: srcs, category })
-                  }
+                  onAddThought={(payload) => addThought(payload)}
+                  onAddPosition={(payload) => addPosition(payload)}
                   categories={CATEGORY_OPTIONS}
                   thoughtsTodayCount={thoughtsTodayCount}
                   positionsTodayCount={positionsTodayCount}
@@ -1070,7 +1083,7 @@ function AppShell() {
             }
           />
           <Route
-            path="/profile/:userId"
+            path="/profile"
             element={
               currentUser ? (
                 <ProfileScreen
@@ -1080,6 +1093,22 @@ function AppShell() {
                   positions={positions}
                   debates={debates}
                   onUpdateUser={(id, updates) => updateUserProfile(id, updates)}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/profiles/:userId"
+            element={
+              currentUser ? (
+                <PublicProfileScreen
+                  currentUser={currentUser}
+                  users={userDirectory}
+                  thoughts={thoughts}
+                  positions={positions}
+                  debates={debates}
                 />
               ) : (
                 <Navigate to="/login" replace />

@@ -65,7 +65,7 @@ export default function PeopleScreen({ users, thoughts, positions, debates, getC
                 <p className="text-xs text-slate-500">{user.user_email || 'No email'}</p>
               </div>
               <Link
-                to={`/profile/${user.id}`}
+                to={`/profiles/${user.id}`}
                 className="text-xs text-cyan-300 hover:text-white"
               >
                 View Profile

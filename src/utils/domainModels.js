@@ -27,18 +27,20 @@ export const CATEGORY_OPTIONS = [
 export function createThought({
   id = safeId(),
   authorId,
+  title = '',
   content,
   createdAt = new Date().toISOString(),
   linkedPositionId = null,
   replyToThoughtId = null,
   category = 'miscellaneous',
 }) {
-  return { id, authorId, content, createdAt, linkedPositionId, replyToThoughtId, category };
+  return { id, authorId, title, content, createdAt, linkedPositionId, replyToThoughtId, category };
 }
 
 export function createPosition({
   id = safeId(),
   authorId,
+  title = '',
   thesis,
   definitions = [],
   sources = [],
@@ -46,7 +48,7 @@ export function createPosition({
   fromThoughtId = null,
   category = 'Miscellaneous',
 }) {
-  return { id, authorId, thesis, definitions, sources, createdAt, fromThoughtId, category };
+  return { id, authorId, title, thesis, definitions, sources, createdAt, fromThoughtId, category };
 }
 
 export function createDebate({

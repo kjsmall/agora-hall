@@ -2,16 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 export default function ProfileScreen({ users, thoughts, positions, debates, currentUser, onUpdateUser }) {
-  const { userId } = useParams();
-  const user = users[userId];
+  const { userId: routeUserId } = useParams();
+  const effectiveUserId = routeUserId || currentUser?.id;
+  const user = users[effectiveUserId];
   const positionDirectory = positions.reduce((acc, pos) => {
     acc[pos.id] = pos;
     return acc;
   }, {});
-  const authoredThoughts = thoughts.filter((t) => t.authorId === userId);
-  const authoredPositions = positions.filter((p) => p.authorId === userId);
+  const authoredThoughts = thoughts.filter((t) => t.authorId === effectiveUserId);
+  const authoredPositions = positions.filter((p) => p.authorId === effectiveUserId);
   const participatedDebates = debates.filter(
-    (d) => d.affirmativeUserId === userId || d.negativeUserId === userId
+    (d) => d.affirmativeUserId === effectiveUserId || d.negativeUserId === effectiveUserId
   );
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [username, setUsername] = useState(user?.username || '');
@@ -24,7 +25,7 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
     setEmail(user.user_email || '');
   }, [user]);
 
-  const isOwner = currentUser?.id === userId;
+  const isOwner = currentUser?.id === effectiveUserId;
 
   if (!user) {
     return <p className="text-slate-400">User not found.</p>;
@@ -37,7 +38,7 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
 
   const handleSave = () => {
     if (!isOwner || !hasChanges) return;
-    onUpdateUser(userId, { display_name: displayName, username, user_email: email });
+    onUpdateUser(effectiveUserId, { display_name: displayName, username, user_email: email });
   };
 
   return (
@@ -98,7 +99,8 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
             className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm shadow-slate-900/30"
           >
             <p className="text-xs text-slate-500">{new Date(thought.createdAt).toLocaleString()}</p>
-            <p className="text-slate-100 mt-2">{thought.content}</p>
+            <h3 className="text-lg font-semibold text-slate-50 mt-1">{thought.title || 'Untitled'}</h3>
+            <p className="text-slate-100 mt-1">{thought.content}</p>
           </div>
         ))}
       </ProfileSection>
@@ -110,7 +112,8 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
             className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm shadow-slate-900/30"
           >
             <p className="text-xs text-slate-500">{new Date(position.createdAt).toLocaleString()}</p>
-            <p className="text-slate-100 mt-2">{position.thesis}</p>
+            <h3 className="text-lg font-semibold text-slate-50 mt-1">{position.title || 'Untitled Position'}</h3>
+            <p className="text-slate-100 mt-1">{position.thesis}</p>
             <p className="text-xs text-slate-500 mt-1">
               {position.definitions.length} definitions · {position.sources.length} sources
             </p>
@@ -131,7 +134,7 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
               Debate on position {positionDirectory[debate.positionId]?.thesis || debate.positionId}
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Role: {debate.affirmativeUserId === userId ? 'Affirmative' : 'Negative'}
+              Role: {debate.affirmativeUserId === effectiveUserId ? 'Affirmative' : 'Negative'}
             </p>
           </div>
         ))}
