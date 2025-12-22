@@ -19,6 +19,7 @@ export default function ThoughtScreen({
   const location = useLocation();
   const thought = thoughts.find((t) => t.id === thoughtId);
   const [commentDraft, setCommentDraft] = useState('');
+  const [commentTitle, setCommentTitle] = useState('');
   const [commentCategory, setCommentCategory] = useState('');
   const fromExplore = location.state?.fromExplore;
   const [showConvert, setShowConvert] = useState(location.state?.convert || false);
@@ -53,10 +54,17 @@ export default function ThoughtScreen({
 
   const handleSubmitComment = async () => {
     const trimmed = commentDraft.trim();
-    if (!trimmed || !commentCategory) return;
-    const id = await onAddComment(trimmed, thoughtId, commentCategory);
+    const titleTrimmed = commentTitle.trim();
+    if (!trimmed || !titleTrimmed || !commentCategory) return;
+    const id = await onAddComment({
+      title: titleTrimmed,
+      content: trimmed,
+      category: commentCategory,
+      replyToThoughtId: thoughtId,
+    });
     if (id) {
       setCommentDraft('');
+      setCommentTitle('');
       setCommentCategory('');
     }
   };
@@ -222,6 +230,7 @@ export default function ThoughtScreen({
                   {getDisplayName(reply.authorId)} · {formatDate(reply.createdAt)}
                 </p>
               </div>
+              <h3 className="text-base font-semibold text-slate-50 mt-2">{reply.title || 'Thought'}</h3>
               <p className="text-slate-100 mt-2 whitespace-pre-wrap">{reply.content}</p>
             </div>
           ))}
@@ -232,6 +241,17 @@ export default function ThoughtScreen({
 
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
           <p className="text-sm text-slate-200">Add your response (counts toward Thought limit).</p>
+          <div>
+            <label className="text-xs text-slate-400 uppercase">Title</label>
+            <input
+              type="text"
+              value={commentTitle}
+              onChange={(e) => setCommentTitle(e.target.value)}
+              className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
+              placeholder="Short headline for your thought"
+              disabled={thoughtsTodayCount >= thoughtsLimit}
+            />
+          </div>
           <div>
             <label className="text-xs text-slate-400 uppercase">Category</label>
             <select
@@ -258,7 +278,12 @@ export default function ThoughtScreen({
           />
           <button
             onClick={handleSubmitComment}
-            disabled={thoughtsTodayCount >= thoughtsLimit || !commentCategory || !commentDraft.trim()}
+            disabled={
+              thoughtsTodayCount >= thoughtsLimit ||
+              !commentCategory ||
+              !commentDraft.trim() ||
+              !commentTitle.trim()
+            }
             className="px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-40"
           >
             Post Thought Response

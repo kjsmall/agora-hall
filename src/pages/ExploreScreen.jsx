@@ -77,6 +77,11 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
       .slice(0, 20);
   }, [feedItems, selectedCategoryValues, selectedTagValues]);
 
+  const positionMap = useMemo(
+    () => positions.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}),
+    [positions]
+  );
+
   const activeDebates = debates
     .filter((d) => d.status !== DEBATE_STATUS.RESOLVED)
     .slice(0, 4);
@@ -250,8 +255,18 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
                       Enter
                     </Link>
                   </div>
-                  <p className="text-sm text-slate-200 mt-1">Aff: {getDisplayName(debate.affirmativeUserId)}</p>
-                  <p className="text-sm text-slate-200">Neg: {getDisplayName(debate.negativeUserId)}</p>
+                  <h3 className="text-base font-semibold text-slate-50 mt-1">
+                    {positionMap[debate.positionId]?.title ||
+                      positionMap[debate.positionId]?.thesis ||
+                      'Position'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {positionMap[debate.positionId]?.thesis || ''}
+                  </p>
+                  <div className="mt-2 text-sm text-slate-200">
+                    <p>Challenger: {getDisplayName(debate.affirmativeUserId)}</p>
+                    <p>Challengee: {getDisplayName(debate.negativeUserId)}</p>
+                  </div>
                 </div>
               ))}
               {activeDebates.length === 0 && <p className="text-slate-400 text-sm">No active debates.</p>}

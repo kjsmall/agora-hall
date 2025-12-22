@@ -28,8 +28,9 @@ const isSameDay = (a, b) => {
 
 const THOUGHTS_PER_DAY = 5;
 const POSITIONS_PER_DAY = 1;
+
 // Max number of signed-up users allowed; adjust as needed to cap signups.
-const MAX_USERS = 100;
+const MAX_USERS = 5;
 const slugifyCategory = (value) =>
   (value || '')
     .toLowerCase()
@@ -1191,9 +1192,7 @@ function AppShell() {
                 <ThoughtScreen
                   thoughts={thoughts}
                   users={userDirectory}
-                  onAddComment={(content, thoughtId, category) =>
-                    addThought({ content, replyToThoughtId: thoughtId, category })
-                  }
+                  onAddComment={(payload) => addThought(payload)}
                   currentUser={currentUser}
                   getDisplayName={getDisplayName}
                   thoughtsTodayCount={thoughtsTodayCount}
