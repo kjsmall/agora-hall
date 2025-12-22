@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DEBATE_STATUS } from '../utils/domainModels';
 
@@ -23,6 +23,12 @@ export default function PositionScreen({
   const [definitionDraft, setDefinitionDraft] = useState('');
   const [definitions, setDefinitions] = useState([]);
   const [category, setCategory] = useState(categories[0] || '');
+
+  useEffect(() => {
+    if (showChallenge && position) {
+      setCategory(position.category || '');
+    }
+  }, [showChallenge, position]);
 
   if (!position) {
     return (
