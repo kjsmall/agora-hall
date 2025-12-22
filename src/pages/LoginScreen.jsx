@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 export default function LoginScreen({ onLogin, error, notice }) {
   const [identifier, setIdentifier] = useState('');
@@ -49,6 +50,10 @@ export default function LoginScreen({ onLogin, error, notice }) {
             Enter Agora
           </button>
         </form>
+        <p className="text-xs text-slate-400 mt-4">
+          Don’t have an account?{' '}
+          <Link to="/signup" className="text-cyan-300 hover:text-white">Create one</Link>
+        </p>
       </div>
     </div>
   );

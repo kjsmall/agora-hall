@@ -17,6 +17,7 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [username, setUsername] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.user_email || '');
+  const [updateError, setUpdateError] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -38,7 +39,9 @@ export default function ProfileScreen({ users, thoughts, positions, debates, cur
 
   const handleSave = () => {
     if (!isOwner || !hasChanges) return;
-    onUpdateUser(effectiveUserId, { display_name: displayName, username, user_email: email });
+    setUpdateError(null);
+    onUpdateUser(effectiveUserId, { display_name: displayName, username, user_email: email })
+      .catch((err) => setUpdateError(err.message || 'Unable to update profile.'));
   };
 
   return (

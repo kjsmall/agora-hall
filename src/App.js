@@ -15,6 +15,7 @@ import PublicProfileScreen from './pages/PublicProfileScreen';
 import ThoughtScreen from './pages/ThoughtScreen';
 import ExploreScreen from './pages/ExploreScreen';
 import PeopleScreen from './pages/PeopleScreen';
+import SignupScreen from './pages/SignupScreen';
 import Header from './components/Header';
 import { CATEGORY_OPTIONS, DEBATE_STATUS, createDebate, createDebateTurn, createPosition, createThought } from './utils/domainModels';
 import { supabase } from './utils/supabaseClient';
@@ -27,6 +28,8 @@ const isSameDay = (a, b) => {
 
 const THOUGHTS_PER_DAY = 5;
 const POSITIONS_PER_DAY = 1;
+// Max number of signed-up users allowed; adjust as needed to cap signups.
+const MAX_USERS = 100;
 const slugifyCategory = (value) =>
   (value || '')
     .toLowerCase()
@@ -320,16 +323,26 @@ function AppShell() {
     async (user) => {
       if (!user) return null;
       const baseProfile = profileFromUser(user);
-       // Optimistically set so routing/UI can proceed even if network is slow.
       setCurrentUser((prev) => prev || baseProfile);
       if (!supabase) {
         mergeProfile(baseProfile);
         setCurrentUser(baseProfile);
         return baseProfile;
       }
-      const { data: ensured, error } = await supabase
+      // Check existing to avoid overwriting username/display_name
+      const { data: existing } = await supabase
         .from('profiles')
-        .upsert({
+        .select('id, username, display_name, user_email')
+        .eq('id', baseProfile.id)
+        .maybeSingle();
+      if (existing) {
+        mergeProfile(existing);
+        setCurrentUser(existing);
+        return existing;
+      }
+      const { data: inserted, error } = await supabase
+        .from('profiles')
+        .insert({
           id: baseProfile.id,
           username: baseProfile.username,
           display_name: baseProfile.display_name,
@@ -344,9 +357,9 @@ function AppShell() {
         setCurrentUser(baseProfile);
         return baseProfile;
       }
-      mergeProfile(ensured);
-      setCurrentUser(ensured);
-      return ensured;
+      mergeProfile(inserted);
+      setCurrentUser(inserted);
+      return inserted;
     },
     [mergeProfile]
   );
@@ -451,6 +464,48 @@ function AppShell() {
     setCurrentUser(null);
     await supabase?.auth?.signOut().catch(() => {});
     navigate('/login');
+  };
+
+  const handleSignup = async (email, password, username) => {
+    setAuthError(null);
+    setAuthNotice(null);
+    if (!supabase) {
+      setAuthError('Supabase client not configured.');
+      return;
+    }
+    if (!email || !password || !username) {
+      setAuthError('Email, username, and password are required.');
+      return;
+    }
+    // Enforce global user limit
+    if (users.length >= MAX_USERS) {
+      setAuthError('User limit reached');
+      return;
+    }
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setAuthError(error.message || 'Unable to create account.');
+      return;
+    }
+    const sessionUser = data?.user || data?.session?.user;
+    if (sessionUser && data?.session) {
+      const ensured = await ensureProfile(sessionUser);
+      if (ensured) {
+        if (username) {
+          try {
+            await updateUserProfile(ensured.id, { username });
+          } catch (err) {
+            setAuthError(err.message || 'Unable to set username.');
+            return;
+          }
+        }
+        setCurrentUser((prev) => ({ ...prev, username }));
+      }
+      setAuthNotice('Account created. Redirecting...');
+      navigate('/');
+    } else {
+      setAuthNotice('Account created. Check your email to confirm.');
+    }
   };
 
   const addThought = async ({ title, content, category, linkedPositionId = null, replyToThoughtId = null }) => {
@@ -955,7 +1010,19 @@ function AppShell() {
       setCurrentUser((prev) => ({ ...prev, ...updates }));
     }
     if (supabase) {
-      await supabase
+      const desiredUsername = updates.username;
+      if (desiredUsername) {
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', desiredUsername)
+          .neq('id', id)
+          .maybeSingle();
+        if (existing) {
+          throw new Error('That handle is already taken. Please choose another one.');
+        }
+      }
+      const { error, data: saved } = await supabase
         .from('profiles')
         .upsert({
           id,
@@ -963,7 +1030,16 @@ function AppShell() {
           display_name: updates.display_name,
           user_email: updates.user_email,
         });
+      if (error) {
+        throw new Error(error.message || 'Unable to save profile.');
+      }
+      if (saved && saved.length > 0) {
+        const merged = { ...updates, ...saved[0], id };
+        mergeProfile(merged);
+        setCurrentUser((prev) => (prev?.id === id ? { ...prev, ...merged } : prev));
+      }
     }
+    return { id, ...updates };
   };
 
   return (
@@ -984,6 +1060,16 @@ function AppShell() {
                 <Navigate to="/" replace />
               ) : (
                 <LoginScreen onLogin={handleLogin} error={authError} notice={authNotice} />
+              )
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              currentUser ? (
+                <Navigate to="/" replace />
+              ) : (
+                <SignupScreen onSignup={handleSignup} error={authError} notice={authNotice} />
               )
             }
           />
