@@ -18,6 +18,7 @@ export default function ThoughtScreen({
   const navigate = useNavigate();
   const location = useLocation();
   const thought = thoughts.find((t) => t.id === thoughtId);
+  const parentThought = thought?.parentThoughtId ? thoughts.find((t) => t.id === thought.parentThoughtId) : null;
   const [commentDraft, setCommentDraft] = useState('');
   const [commentTitle, setCommentTitle] = useState('');
   const [commentCategory, setCommentCategory] = useState('');
@@ -33,7 +34,7 @@ export default function ThoughtScreen({
   const replies = useMemo(
     () =>
       thoughts
-        .filter((t) => t.replyToThoughtId === thoughtId)
+        .filter((t) => t.parentThoughtId === thoughtId)
         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
     [thoughtId, thoughts]
   );
@@ -60,8 +61,8 @@ export default function ThoughtScreen({
       title: titleTrimmed,
       content: trimmed,
       category: commentCategory,
-      replyToThoughtId: thoughtId,
-    });
+          parentThoughtId: thoughtId,
+        });
     if (id) {
       setCommentDraft('');
       setCommentTitle('');
@@ -120,6 +121,11 @@ export default function ThoughtScreen({
               {getDisplayName(thought.authorId)} · {formatDate(thought.createdAt)}
             </p>
             <h1 className="text-2xl font-semibold text-slate-50 mt-2">{thought.title || 'Thought'}</h1>
+            {parentThought && (
+              <p className="text-sm text-slate-400 mt-1">
+                Reply to: <span className="text-slate-200">{parentThought.title || 'Thought'}</span>
+              </p>
+            )}
           </div>
           <Link to="/" className="text-cyan-300 text-sm hover:text-white">
             Return to {fromExplore ? 'Explore' : 'Home'}

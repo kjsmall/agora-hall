@@ -82,19 +82,113 @@ function AppShell() {
 
   const [turns, setTurns] = useState([]);
   const [debateVotes, setDebateVotes] = useState({});
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const navigate = useNavigate();
   const userDirectory = useMemo(
     () => users.reduce((acc, user) => ({ ...acc, [user.id]: user }), {}),
     [users]
   );
+  const unreadNotifications = useMemo(
+    () => notifications.filter((n) => !n.isRead).length,
+    [notifications]
+  );
+
+  const mapNotification = (row) => ({
+    id: row.id,
+    recipientId: row.recipient_profile_id,
+    type: row.type,
+    debateId: row.debate_id,
+    positionId: row.position_id,
+    data: row.data,
+    isRead: row.is_read,
+    readAt: row.read_at,
+    createdAt: row.created_at,
+  });
+
+  const fetchNotifications = useCallback(async () => {
+    if (!supabase || !currentUser) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, recipient_profile_id, type, debate_id, position_id, data, is_read, read_at, created_at')
+      .eq('recipient_profile_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error loading notifications', error);
+      return;
+    }
+    setNotifications((data || []).map(mapNotification));
+  }, [currentUser]);
+
+  const createNotification = async ({ recipientId, type, debateId = null, positionId = null, data = null }) => {
+    if (!supabase || !recipientId) return;
+    // Do not notify the same user who triggered the action.
+    if (currentUser && recipientId === currentUser.id) return;
+    try {
+      const { data: inserted } = await supabase
+        .from('notifications')
+        .insert({
+          recipient_profile_id: recipientId,
+          type,
+          debate_id: debateId,
+          position_id: positionId,
+          data,
+        })
+        .select('id, recipient_profile_id, type, debate_id, position_id, data, is_read, read_at, created_at')
+        .single();
+      if (inserted) {
+        setNotifications((prev) => [mapNotification(inserted), ...prev]);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error creating notification', err);
+    }
+  };
+
+  const notifyDebateCompleted = async ({ debateId, positionId, initiatorId, respondentId, winnerUserId }) => {
+    await createNotification({
+      recipientId: initiatorId,
+      type: 'debate_completed',
+      debateId,
+      positionId,
+      data: { winner_profile_id: winnerUserId },
+    });
+    await createNotification({
+      recipientId: respondentId,
+      type: 'debate_completed',
+      debateId,
+      positionId,
+      data: { winner_profile_id: winnerUserId },
+    });
+  };
+
+  const markNotificationsRead = async (ids) => {
+    if (!supabase || !currentUser || !ids || ids.length === 0) return;
+    const now = new Date().toISOString();
+    try {
+      await supabase
+        .from('notifications')
+        .update({ is_read: true, read_at: now })
+        .in('id', ids)
+        .eq('recipient_profile_id', currentUser.id);
+      setNotifications((prev) =>
+        prev.map((n) => (ids.includes(n.id) ? { ...n, isRead: true, readAt: now } : n))
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error marking notifications read', err);
+    }
+  };
 
   const fetchThoughts = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('thoughts')
-      .select('id, author_id, title, content, created_at, category, is_promoted')
+      .select('id, author_id, title, content, created_at, category, is_promoted, parent_thought_id, root_thought_id, depth, is_deleted')
       .eq('is_promoted', false)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
     if (error) {
       // eslint-disable-next-line no-console
@@ -111,6 +205,10 @@ function AppShell() {
         createdAt: row.created_at,
         category: row.category || 'miscellaneous',
         isPromoted: row.is_promoted || false,
+        parentThoughtId: row.parent_thought_id || null,
+        rootThoughtId: row.root_thought_id || null,
+        depth: row.depth || 0,
+        isDeleted: row.is_deleted || false,
       })
     );
     setThoughts(mapped);
@@ -229,6 +327,16 @@ function AppShell() {
     }
   }, [currentUser, fetchDebates]);
 
+  useEffect(() => {
+    if (currentUser) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 5000);
+      return () => clearInterval(interval);
+    }
+    setNotifications([]);
+    return () => {};
+  }, [currentUser, fetchNotifications]);
+
   const fetchDebateTurns = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
@@ -293,6 +401,19 @@ function AppShell() {
       setDebateVotes({});
     }
   }, [currentUser, fetchDebateVotes]);
+
+  // Global polling to keep feeds/turns/votes fresh; direct creates still update immediately.
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const interval = setInterval(() => {
+      fetchThoughts();
+      fetchPositions();
+      fetchDebates();
+      fetchDebateTurns();
+      fetchDebateVotes();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [currentUser, fetchThoughts, fetchPositions, fetchDebates, fetchDebateTurns, fetchDebateVotes]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -386,6 +507,64 @@ function AppShell() {
       .split('_')
       .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
       .join(' ');
+  };
+
+  const buildNotificationLabel = useCallback(
+    (note) => {
+      const data = note.data || {};
+      switch (note.type) {
+        case 'new_challenge':
+          return `New challenge on your position${data.challenger_profile_id ? ` from ${getDisplayName(data.challenger_profile_id)}` : ''}`;
+        case 'new_turn': {
+          const other = data.author_profile_id ? getDisplayName(data.author_profile_id) : 'Opponent';
+          const kind = data.kind || 'turn';
+          return `${other} posted a ${kind} in your debate`;
+        }
+        case 'debate_completed': {
+          const winner =
+            data.winner_profile_id && getDisplayName(data.winner_profile_id) !== 'Anonymous'
+              ? getDisplayName(data.winner_profile_id)
+              : null;
+          return `Debate completed${winner ? ` – winner: ${winner}` : ''}`;
+        }
+        case 'thought_reply': {
+          const from = data.replier_profile_id ? getDisplayName(data.replier_profile_id) : 'Someone';
+          return `${from} replied to your thought`;
+        }
+        default:
+          return 'Notification';
+      }
+    },
+    [getDisplayName]
+  );
+
+  const decoratedNotifications = useMemo(
+    () => notifications.map((n) => ({ ...n, message: buildNotificationLabel(n) })),
+    [notifications, buildNotificationLabel]
+  );
+
+  const unreadIds = useMemo(() => notifications.filter((n) => !n.isRead).map((n) => n.id), [notifications]);
+
+  const handleNotificationClick = (note) => {
+    if (!note) return;
+    if (note.type === 'thought_reply') {
+      const thoughtId = note.data?.thought_id || note.data?.thoughtId;
+      if (thoughtId) navigate(`/thoughts/${thoughtId}`);
+    } else if (note.debateId) {
+      navigate(`/debates/${note.debateId}`);
+    }
+    markNotificationsRead([note.id]);
+    setNotificationsOpen(false);
+  };
+
+  const handleToggleNotifications = () => {
+    setNotificationsOpen((prev) => {
+      const next = !prev;
+      if (!prev && unreadIds.length > 0) {
+        markNotificationsRead(unreadIds);
+      }
+      return next;
+    });
   };
 
   const thoughtsTodayCount = currentUser
@@ -511,13 +690,13 @@ function AppShell() {
     }
   };
 
-  const addThought = async ({ title, content, category, linkedPositionId = null, replyToThoughtId = null }) => {
+  const addThought = async ({ title, content, category, linkedPositionId = null, replyToThoughtId = null, parentThoughtId = null }) => {
     if (!currentUser) return null;
     const ensuredUser = await ensureProfile(currentUser);
     const authorId = ensuredUser?.id || currentUser.id;
     const body = typeof content === 'string' ? content : String(content || '');
     const todayCount = thoughts.filter(
-      (thought) => thought.authorId === authorId && isSameDay(thought.createdAt, new Date())
+      (thought) => thought.authorId === authorId && !thought.isDeleted && isSameDay(thought.createdAt, new Date())
     ).length;
     if (todayCount >= THOUGHTS_PER_DAY) return null;
     const safeTitle =
@@ -527,6 +706,28 @@ function AppShell() {
         .slice(0, 80);
     if (!category || !safeTitle || !body) return null;
     const categorySlug = slugifyCategory(category);
+    const parentId = parentThoughtId || replyToThoughtId || null;
+    let parentMeta = null;
+    if (parentId) {
+      parentMeta = thoughts.find((t) => t.id === parentId) || null;
+      if (!parentMeta && supabase) {
+        const { data: parentRow } = await supabase
+          .from('thoughts')
+          .select('id, root_thought_id, depth, author_id')
+          .eq('id', parentId)
+          .maybeSingle();
+        if (parentRow) {
+          parentMeta = {
+            id: parentRow.id,
+            rootThoughtId: parentRow.root_thought_id,
+            depth: parentRow.depth || 0,
+            authorId: parentRow.author_id,
+          };
+        }
+      }
+    }
+    const rootThoughtId = parentMeta ? parentMeta.rootThoughtId || parentMeta.id : null;
+    const depth = parentMeta ? (parentMeta.depth || 0) + 1 : 0;
     try {
       if (supabase) {
         const { data, error } = await supabase
@@ -537,8 +738,12 @@ function AppShell() {
             content: body,
             category: categorySlug,
             is_promoted: false,
+            parent_thought_id: parentId,
+            root_thought_id: rootThoughtId,
+            depth,
+            is_deleted: false,
           })
-          .select('id, author_id, title, content, created_at, category, is_promoted')
+          .select('id, author_id, title, content, created_at, category, is_promoted, parent_thought_id, root_thought_id, depth, is_deleted')
           .single();
         if (error) {
           // eslint-disable-next-line no-console
@@ -552,11 +757,28 @@ function AppShell() {
           content: data.content,
           createdAt: data.created_at,
           linkedPositionId,
-          replyToThoughtId,
+          parentThoughtId: data.parent_thought_id || null,
+          rootThoughtId: data.root_thought_id || null,
+          depth: data.depth || 0,
           category: data.category || categorySlug,
           isPromoted: data.is_promoted || false,
+          isDeleted: data.is_deleted || false,
         });
+        // If root is missing (top-level), set to self
+        if (!newThought.rootThoughtId && supabase) {
+          newThought.rootThoughtId = newThought.id;
+          await supabase.from('thoughts').update({ root_thought_id: newThought.id }).eq('id', newThought.id);
+        }
         setThoughts((prev) => [newThought, ...prev]);
+        // Keep thoughts fresh immediately after creation (not tied to notification polling).
+        fetchThoughts();
+        if (parentId && parentMeta && parentMeta.authorId && parentMeta.authorId !== authorId) {
+          await createNotification({
+            recipientId: parentMeta.authorId,
+            type: 'thought_reply',
+            data: { thought_id: parentId, reply_thought_id: newThought.id, replier_profile_id: authorId },
+          });
+        }
         return newThought.id;
       }
     } catch (err) {
@@ -568,11 +790,28 @@ function AppShell() {
       title: safeTitle,
       content: body,
       linkedPositionId,
-      replyToThoughtId,
+      parentThoughtId: parentId,
+      rootThoughtId: rootThoughtId || null,
+      depth,
       category: categorySlug,
       isPromoted: false,
+      isDeleted: false,
     });
+    if (!fallbackThought.rootThoughtId && !parentId) {
+      fallbackThought.rootThoughtId = fallbackThought.id;
+    }
     setThoughts((prev) => [fallbackThought, ...prev]);
+    fetchThoughts();
+    if (parentId) {
+      const parentThought = thoughts.find((t) => t.id === parentId);
+      if (parentThought && parentThought.authorId !== authorId) {
+        await createNotification({
+          recipientId: parentThought.authorId,
+          type: 'thought_reply',
+          data: { thought_id: parentId, reply_thought_id: fallbackThought.id, replier_profile_id: authorId },
+        });
+      }
+    }
     return fallbackThought.id;
   };
 
@@ -615,6 +854,8 @@ function AppShell() {
         fromThoughtId: data.from_thought_id || null,
       };
       setPositions((prev) => [newPosition, ...prev]);
+      // Refresh positions immediately after create to avoid waiting on any other polling.
+      fetchPositions();
       return newPosition.id;
     }
     const newPosition = createPosition({
@@ -626,6 +867,7 @@ function AppShell() {
       category,
     });
     setPositions((prev) => [newPosition, ...prev]);
+    fetchPositions();
     return newPosition.id;
   };
 
@@ -808,6 +1050,22 @@ function AppShell() {
         currentTurnProfileId: respondentId,
       };
       setDebates((prev) => [mapped, ...prev]);
+      await createNotification({
+        recipientId: respondentId,
+        type: 'new_challenge',
+        debateId: mapped.id,
+        positionId,
+        data: { challenger_profile_id: initiatorId },
+      });
+      if (openingTurn) {
+        await createNotification({
+          recipientId: respondentId,
+          type: 'new_turn',
+          debateId: mapped.id,
+          positionId,
+          data: { author_profile_id: initiatorId, kind: 'opening' },
+        });
+      }
       return mapped.id;
     }
     const newDebate = createDebate({
@@ -860,6 +1118,14 @@ function AppShell() {
         roundNumber: data.round_number,
       });
       setTurns((prev) => [...prev, newTurn]);
+      const recipientId = authorId === debate.affirmativeUserId ? debate.negativeUserId : debate.affirmativeUserId;
+      await createNotification({
+        recipientId,
+        type: 'new_turn',
+        debateId,
+        positionId: debate.positionId,
+        data: { author_profile_id: authorId, kind: 'round', round_number: roundNumber },
+      });
 
       // Determine next turn assignment
       const authorsThisRound = new Set([...roundTurns.map((t) => t.authorId), authorId]);
@@ -938,6 +1204,13 @@ function AppShell() {
           turnNumber: openingTurn.round_number || 0,
         });
         setTurns((prev) => [...prev, newTurn]);
+        await createNotification({
+          recipientId: debate.affirmativeUserId,
+          type: 'new_turn',
+          debateId,
+          positionId: debate.positionId,
+          data: { author_profile_id: debate.negativeUserId, kind: 'opening' },
+        });
       }
     }
     updateDebate(debateId, {
@@ -965,7 +1238,17 @@ function AppShell() {
         kind: 'closing',
         content: text,
       });
+      const recipientId = authorId === debate.affirmativeUserId ? debate.negativeUserId : debate.affirmativeUserId;
+      await createNotification({
+        recipientId,
+        type: 'new_turn',
+        debateId,
+        positionId: debate.positionId,
+        data: { author_profile_id: authorId, kind: 'closing' },
+      });
     }
+    let shouldComplete = false;
+    let nextTurnProfileId = null;
     updateDebate(debateId, (prevDebate) => {
       const updates =
         role === 'challenger'
@@ -974,22 +1257,8 @@ function AppShell() {
       const bothHave =
         (role === 'challenger' ? text : prevDebate.closingChallenger) &&
         (role === 'challengee' ? text : prevDebate.closingOpponent);
-      const nextTurnProfileId = role === 'challenger' ? prevDebate.negativeUserId : null;
-      if (bothHave && supabase) {
-        supabase
-          .from('debates')
-          .update({
-            status: 'completed',
-            resolved_at: new Date().toISOString(),
-            current_turn_profile_id: null,
-          })
-          .eq('id', debateId);
-      } else if (supabase) {
-        supabase
-          .from('debates')
-          .update({ current_turn_profile_id: nextTurnProfileId })
-          .eq('id', debateId);
-      }
+      nextTurnProfileId = role === 'challenger' ? prevDebate.negativeUserId : null;
+      shouldComplete = bothHave;
       return {
         ...updates,
         status: bothHave ? DEBATE_STATUS.RESOLVED : prevDebate.status,
@@ -998,6 +1267,30 @@ function AppShell() {
         winnerUserId: bothHave ? null : prevDebate.winnerUserId,
       };
     });
+    if (supabase) {
+      if (shouldComplete) {
+        await supabase
+          .from('debates')
+          .update({
+            status: 'completed',
+            resolved_at: new Date().toISOString(),
+            current_turn_profile_id: null,
+          })
+          .eq('id', debateId);
+        await notifyDebateCompleted({
+          debateId,
+          positionId: debate.positionId,
+          initiatorId: debate.affirmativeUserId,
+          respondentId: debate.negativeUserId,
+          winnerUserId: null,
+        });
+      } else {
+        await supabase
+          .from('debates')
+          .update({ current_turn_profile_id: nextTurnProfileId })
+          .eq('id', debateId);
+      }
+    }
   };
 
   const forfeitDebate = async (debateId, forfeiterId) => {
@@ -1016,6 +1309,13 @@ function AppShell() {
           current_turn_profile_id: null,
         })
         .eq('id', debateId);
+      await notifyDebateCompleted({
+        debateId,
+        positionId: debate.positionId,
+        initiatorId: debate.affirmativeUserId,
+        respondentId: debate.negativeUserId,
+        winnerUserId,
+      });
     }
     updateDebate(debateId, {
       status: DEBATE_STATUS.RESOLVED,
@@ -1110,6 +1410,11 @@ function AppShell() {
           <Header
             currentUser={currentUser}
             onLogout={handleLogout}
+            notifications={decoratedNotifications}
+            unreadCount={unreadNotifications}
+            notificationsOpen={notificationsOpen}
+            onToggleNotifications={handleToggleNotifications}
+            onNotificationClick={handleNotificationClick}
           />
         )}
         <Routes>
@@ -1222,6 +1527,8 @@ function AppShell() {
                   onSubmitClosing={submitClosing}
                   onVote={voteDebate}
                   onForfeit={forfeitDebate}
+                  onPollTurns={fetchDebateTurns}
+                  onPollVotes={fetchDebateVotes}
                 />
               ) : (
                 <Navigate to="/login" replace />

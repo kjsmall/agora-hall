@@ -1,7 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import NotificationBell from './NotificationBell';
 
-export default function Header({ currentUser, onLogout }) {
+export default function Header({
+  currentUser,
+  onLogout,
+  notifications,
+  unreadCount,
+  notificationsOpen,
+  onToggleNotifications,
+  onNotificationClick,
+}) {
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
       <Link to="/" className="text-2xl font-semibold tracking-tight text-cyan-200">
@@ -29,6 +38,13 @@ export default function Header({ currentUser, onLogout }) {
         >
           Profile
         </Link>
+        <NotificationBell
+          notifications={notifications}
+          unreadCount={unreadCount}
+          open={notificationsOpen}
+          onToggle={onToggleNotifications}
+          onNotificationClick={onNotificationClick}
+        />
         <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">
           <span className="text-slate-100">{currentUser.username}</span>
           <button

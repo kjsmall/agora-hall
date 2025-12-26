@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DEBATE_STATUS } from '../utils/domainModels';
 
@@ -17,6 +17,8 @@ export default function DebateScreen({
   onSubmitClosing,
   onVote,
   onForfeit,
+  onPollTurns,
+  onPollVotes,
 }) {
   const { debateId } = useParams();
   const navigate = useNavigate();
@@ -47,6 +49,14 @@ export default function DebateScreen({
   const [draft, setDraft] = useState('');
   const [challengeeOpening, setChallengeeOpening] = useState('');
   const [closingDraft, setClosingDraft] = useState('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (onPollTurns) onPollTurns();
+      if (onPollVotes) onPollVotes();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [onPollTurns, onPollVotes]);
 
   if (!debate) {
     return (

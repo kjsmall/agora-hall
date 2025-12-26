@@ -31,11 +31,27 @@ export function createThought({
   content,
   createdAt = new Date().toISOString(),
   linkedPositionId = null,
-  replyToThoughtId = null,
+  parentThoughtId = null,
+  rootThoughtId = null,
+  depth = 0,
   category = 'miscellaneous',
   isPromoted = false,
+  isDeleted = false,
 }) {
-  return { id, authorId, title, content, createdAt, linkedPositionId, replyToThoughtId, category, isPromoted };
+  return {
+    id,
+    authorId,
+    title,
+    content,
+    createdAt,
+    linkedPositionId,
+    parentThoughtId,
+    rootThoughtId,
+    depth,
+    category,
+    isPromoted,
+    isDeleted,
+  };
 }
 
 export function createPosition({
