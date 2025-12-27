@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-export default function LoginScreen({ onLogin }) {
-  const [name, setName] = useState('');
+export default function LoginScreen({ onLogin, error, notice }) {
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onLogin(name);
+    if (submitting) return;
+    setSubmitting(true);
+    await onLogin(identifier, password);
+    setSubmitting(false);
   };
 
   return (
@@ -18,22 +24,48 @@ export default function LoginScreen({ onLogin }) {
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300 mb-2">Your name</label>
+            <label className="block text-sm text-slate-300 mb-2">Email</label>
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              type="email"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-              placeholder="Add your name"
+              placeholder="you@example.com"
+              required
             />
           </div>
+          <div>
+            <label className="block text-sm text-slate-300 mb-2">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              placeholder="Enter your password"
+              required
+            />
+          </div>
+          {error && <p className="text-sm text-red-300">{error}</p>}
+          {notice && <p className="text-sm text-cyan-200">{notice}</p>}
           <button
             type="submit"
-            className="w-full py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors"
+            disabled={submitting}
+            className="w-full py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-60"
           >
-            Enter Agora
+            {submitting ? 'Signing in...' : 'Enter Agora'}
           </button>
         </form>
+        <div className="mt-4 flex flex-col gap-2 text-xs text-slate-400">
+          <p>
+            Don’t have an account?{' '}
+            <Link to="/signup" className="text-cyan-300 hover:text-white">Create one</Link>
+          </p>
+          <p>
+            <Link to="/forgot-password" className="text-cyan-300 hover:text-white">
+              Forgot password?
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DEBATE_STATUS } from '../utils/domainModels';
 
@@ -16,6 +16,9 @@ export default function DebateScreen({
   onRejectChallenge,
   onSubmitClosing,
   onVote,
+  onForfeit,
+  onPollTurns,
+  onPollVotes,
 }) {
   const { debateId } = useParams();
   const navigate = useNavigate();
@@ -30,10 +33,30 @@ export default function DebateScreen({
         .sort((a, b) => a.turnNumber - b.turnNumber),
     [debateId, turns]
   );
+  const sortedTurns = useMemo(() => {
+    const openings = debateTurns
+      .filter((t) => t.kind === 'opening')
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const rounds = debateTurns
+      .filter((t) => t.kind === 'round')
+      .sort((a, b) => (a.roundNumber || a.turnNumber) - (b.roundNumber || b.turnNumber));
+    const closings = debateTurns
+      .filter((t) => t.kind === 'closing')
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return [...openings, ...rounds, ...closings];
+  }, [debateTurns]);
 
   const [draft, setDraft] = useState('');
   const [challengeeOpening, setChallengeeOpening] = useState('');
   const [closingDraft, setClosingDraft] = useState('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (onPollTurns) onPollTurns();
+      if (onPollVotes) onPollVotes();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [onPollTurns, onPollVotes]);
 
   if (!debate) {
     return (
@@ -51,15 +74,22 @@ export default function DebateScreen({
 
   const challengerId = debate.affirmativeUserId;
   const challengeeId = debate.negativeUserId;
-  const nextTurnNumber = debateTurns.length + 1;
-  const nextAuthorId = nextTurnNumber % 2 === 1 ? challengerId : challengeeId;
-  const userIsNext =
-    debate.status === DEBATE_STATUS.ACTIVE &&
-    nextTurnNumber <= 10 &&
-    currentUser.id === nextAuthorId;
+  const isParticipant = currentUser?.id === challengerId || currentUser?.id === challengeeId;
+  const challengerOpeningTurn = debateTurns.find(
+    (t) => t.kind === 'opening' && t.authorId === challengerId
+  );
+  const challengeeOpeningTurn = debateTurns.find(
+    (t) => t.kind === 'opening' && t.authorId === challengeeId
+  );
+  const roundTurns = debateTurns.filter((t) => t.kind === 'round');
+  const currentRound = debate.currentRound || 0;
+  const nextRoundNumber = currentRound + 1;
+  const userIsNext = debate.status === DEBATE_STATUS.ACTIVE && currentUser?.id === debate.currentTurnProfileId;
+  const inClosingPhase = debate.status === DEBATE_STATUS.ACTIVE && currentRound >= (debate.maxRounds || 10);
+  const canForfeit = isParticipant && debate.status !== DEBATE_STATUS.RESOLVED && debate.status !== 'pending';
 
   const handleSubmitTurn = () => {
-    if (!userIsNext) return;
+    if (!userIsNext || inClosingPhase) return;
     const trimmed = draft.trim();
     if (!trimmed) return;
     onAddTurn(debate.id, currentUser.id, trimmed);
@@ -95,6 +125,11 @@ export default function DebateScreen({
         >
           ⬅ Return to {location.state?.fromExplore ? 'Explore' : position ? 'Position' : 'Home'}
         </button>
+        {debate.status === DEBATE_STATUS.RESOLVED && debate.winnerUserId && (
+          <span className="text-xs text-slate-400">
+            Winner: {getDisplayName(debate.winnerUserId)}
+          </span>
+        )}
       </div>
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-slate-900/40">
         <div className="flex items-start justify-between gap-4">
@@ -120,12 +155,12 @@ export default function DebateScreen({
           </Link>
         </div>
         <div className="mt-4 grid md:grid-cols-2 gap-4">
-          <Meta label="Affirmative" value={getDisplayName(debate.affirmativeUserId)} />
-          <Meta label="Negative" value={getDisplayName(debate.negativeUserId)} />
+          <Meta label="Challenger" value={getDisplayName(debate.affirmativeUserId)} />
+          <Meta label="Challengee" value={getDisplayName(debate.negativeUserId)} />
         </div>
       </div>
 
-      {debate.challengeStatus === 'pending' && (
+          {debate.challengeStatus === 'pending' && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-md shadow-slate-900/40 space-y-3">
           <h2 className="text-lg font-semibold text-slate-50">Challenge</h2>
           <p className="text-sm text-slate-300">Opposing position: {debate.opposingPosition}</p>
@@ -133,7 +168,7 @@ export default function DebateScreen({
             <p className="text-xs text-slate-400 uppercase mb-1">Challenger Opening</p>
             <p className="text-slate-100 whitespace-pre-wrap">{debate.challengerOpening}</p>
           </div>
-          {currentUser.id === challengeeId ? (
+          {currentUser?.id === challengeeId ? (
             <>
               <label className="text-xs text-slate-400 uppercase">Your opening (max 2500 words)</label>
               <textarea
@@ -172,16 +207,20 @@ export default function DebateScreen({
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-slate-400 uppercase mb-1">Challenger Opening</p>
-              <p className="text-slate-100 whitespace-pre-wrap">{debate.challengerOpening || 'Not provided.'}</p>
+              <p className="text-slate-100 whitespace-pre-wrap">
+                {challengerOpeningTurn?.content ||
+                  debate.challengerOpening ||
+                  'Not provided.'}
+              </p>
             </div>
             <div>
               <p className="text-xs text-slate-400 uppercase mb-1">Challengee Opening</p>
-              <p className="text-slate-100 whitespace-pre-wrap">{debate.challengeeOpening || 'Not provided.'}</p>
+              <p className="text-slate-100 whitespace-pre-wrap">
+                {challengeeOpeningTurn?.content ||
+                  debate.challengeeOpening ||
+                  'Not provided.'}
+              </p>
             </div>
-          </div>
-          <div>
-            <p className="text-xs text-slate-400 uppercase mb-1">Opposing Position</p>
-            <p className="text-slate-100">{debate.opposingPosition}</p>
           </div>
           {debate.challengeDefinitions?.length > 0 && (
             <div>
@@ -202,87 +241,124 @@ export default function DebateScreen({
           <p className="text-xs text-slate-400">Linear only · no subrooms</p>
         </div>
         <div className="space-y-3">
-          {debateTurns.map((turn) => (
-            <div
-              key={turn.id}
-              className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-400">
-                  Turn {turn.turnNumber} · {getDisplayName(turn.authorId)}
-                </p>
-                <p className="text-[11px] text-slate-500">{new Date(turn.createdAt).toLocaleString()}</p>
+          {sortedTurns.map((turn) => {
+            const label =
+              turn.kind === 'opening'
+                ? `Opening · ${getDisplayName(turn.authorId)}`
+                : turn.kind === 'closing'
+                ? `Closing · ${getDisplayName(turn.authorId)}`
+                : `Round ${turn.roundNumber || turn.turnNumber} · ${getDisplayName(turn.authorId)}`;
+            return (
+              <div
+                key={turn.id}
+                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400">{label}</p>
+                  <p className="text-[11px] text-slate-500">{new Date(turn.createdAt).toLocaleString()}</p>
+                </div>
+                <p className="text-slate-100 mt-2 whitespace-pre-wrap">{turn.content}</p>
               </div>
-              <p className="text-slate-100 mt-2 whitespace-pre-wrap">{turn.content}</p>
-            </div>
-          ))}
-          {debateTurns.length === 0 && (
+            );
+          })}
+          {sortedTurns.length === 0 && (
             <p className="text-slate-400 text-sm">No turns yet. Affirmative opens.</p>
           )}
         </div>
 
-        {debate.challengeStatus === 'accepted' && debate.status === DEBATE_STATUS.ACTIVE && nextTurnNumber <= 10 ? (
+          {debate.status === DEBATE_STATUS.ACTIVE && !inClosingPhase ? (
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-200">
-                Next turn: {nextTurnNumber} · {getDisplayName(nextAuthorId)}
+                Next turn: Round {nextRoundNumber} · {getDisplayName(debate.currentTurnProfileId)}
               </p>
               {!userIsNext && (
                 <p className="text-xs text-slate-500">
-                  Waiting for {getDisplayName(nextAuthorId)}
+                  Waiting for {getDisplayName(debate.currentTurnProfileId)}
                 </p>
               )}
             </div>
-            <textarea
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
-              rows={3}
-              placeholder="Add your turn with clarity and concision."
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              disabled={!userIsNext}
-            />
-            <button
-              onClick={handleSubmitTurn}
-              className="px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-40"
-              disabled={!userIsNext}
-            >
-              Submit Turn
-            </button>
+            {isParticipant ? (
+              <>
+                <textarea
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
+                  rows={3}
+                  placeholder="Add your turn with clarity and concision."
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  disabled={!userIsNext}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleSubmitTurn}
+                    className="px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-40"
+                    disabled={!userIsNext}
+                  >
+                    Submit Turn
+                  </button>
+                  {canForfeit && (
+                    <button
+                      onClick={() => onForfeit?.(debate.id, currentUser.id)}
+                      className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors disabled:opacity-40"
+                      type="button"
+                    >
+                      Forfeit
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Only debaters can add turns.</p>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-            <p className="text-sm text-slate-300">
-              Debate closed or turn limit reached. Archive outcomes with moderation + community.
-            </p>
-            {debate.challengeStatus === 'accepted' && (
-              <div className="space-y-2">
-                <p className="text-sm text-slate-200">Closing Statements</p>
-                <textarea
-                  rows={3}
-                  value={closingDraft}
-                  onChange={(e) => setClosingDraft(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  placeholder="Add your closing statement."
-                  disabled={
-                    (currentUser.id === challengerId && debate.closingChallenger) ||
-                    (currentUser.id === challengeeId && debate.closingOpponent)
-                  }
-                />
-                <button
-                  onClick={handleSubmitClosing}
-                  className="px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-40"
-                  disabled={
-                    !closingDraft.trim() ||
-                    (currentUser.id === challengerId && debate.closingChallenger) ||
-                    (currentUser.id === challengeeId && debate.closingOpponent)
-                  }
-                >
-                  Submit Closing
-                </button>
-                <div className="text-xs text-slate-400">
-                  Challenger closes last; ensure both openings precede closings.
-                </div>
-              </div>
+            {debate.status === DEBATE_STATUS.ACTIVE && inClosingPhase ? (
+              <>
+                <p className="text-sm text-slate-300">Closing Statements</p>
+                {isParticipant ? (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      {userIsNext
+                        ? 'Your closing is due now.'
+                        : `Waiting for ${getDisplayName(debate.currentTurnProfileId)} to submit closing.`}
+                    </p>
+                    {userIsNext ? (
+                      <>
+                        <textarea
+                          rows={3}
+                          value={closingDraft}
+                          onChange={(e) => setClosingDraft(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                          placeholder="Add your closing statement."
+                        />
+                        <button
+                          onClick={handleSubmitClosing}
+                          className="px-4 py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-40"
+                          disabled={!closingDraft.trim()}
+                        >
+                          Submit Closing
+                        </button>
+                        {canForfeit && (
+                          <button
+                            onClick={() => onForfeit?.(debate.id, currentUser.id)}
+                            className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors disabled:opacity-40"
+                            type="button"
+                          >
+                            Forfeit
+                          </button>
+                        )}
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Only debaters may submit closings.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-slate-300">
+                Debate closed or turn limit reached. Archive outcomes with moderation + community.
+              </p>
             )}
           </div>
         )}

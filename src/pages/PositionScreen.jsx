@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DEBATE_STATUS } from '../utils/domainModels';
 
@@ -23,6 +23,12 @@ export default function PositionScreen({
   const [definitionDraft, setDefinitionDraft] = useState('');
   const [definitions, setDefinitions] = useState([]);
   const [category, setCategory] = useState(categories[0] || '');
+
+  useEffect(() => {
+    if (showChallenge && position) {
+      setCategory(position.category || '');
+    }
+  }, [showChallenge, position]);
 
   if (!position) {
     return (
@@ -147,18 +153,12 @@ export default function PositionScreen({
                 )}
               </div>
               <div>
-                <label className="text-xs text-slate-400 uppercase">Category</label>
-                <select
+                <label className="text-xs text-slate-400 uppercase">Category (locked to position)</label>
+                <input
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                  disabled
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none"
+                />
               </div>
               <div className="flex justify-end gap-3">
                 <button
@@ -168,10 +168,10 @@ export default function PositionScreen({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const wordCount = opening.trim().split(/\s+/).filter(Boolean).length;
                     if (!opposingPosition.trim() || !opening.trim() || wordCount > 2500 || !category) return;
-                    const id = onChallenge(position.id, {
+                    const id = await onChallenge(position.id, {
                       opening: opening.trim(),
                       opposingPosition: opposingPosition.trim(),
                       definitions,
@@ -201,6 +201,9 @@ export default function PositionScreen({
             <p className="text-slate-400 text-sm">
               Each debate is contained—no subrooms or branches.
             </p>
+            {position.fromThoughtId && (
+              <p className="text-xs text-slate-500 mt-1">Originated as a Thought.</p>
+            )}
           </div>
           <Link
             to={fromExplore ? "/explore" : "/"}

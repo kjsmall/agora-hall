@@ -27,18 +27,37 @@ export const CATEGORY_OPTIONS = [
 export function createThought({
   id = safeId(),
   authorId,
+  title = '',
   content,
   createdAt = new Date().toISOString(),
   linkedPositionId = null,
-  replyToThoughtId = null,
-  category = 'Miscellaneous',
+  parentThoughtId = null,
+  rootThoughtId = null,
+  depth = 0,
+  category = 'miscellaneous',
+  isPromoted = false,
+  isDeleted = false,
 }) {
-  return { id, authorId, content, createdAt, linkedPositionId, replyToThoughtId, category };
+  return {
+    id,
+    authorId,
+    title,
+    content,
+    createdAt,
+    linkedPositionId,
+    parentThoughtId,
+    rootThoughtId,
+    depth,
+    category,
+    isPromoted,
+    isDeleted,
+  };
 }
 
 export function createPosition({
   id = safeId(),
   authorId,
+  title = '',
   thesis,
   definitions = [],
   sources = [],
@@ -46,7 +65,7 @@ export function createPosition({
   fromThoughtId = null,
   category = 'Miscellaneous',
 }) {
-  return { id, authorId, thesis, definitions, sources, createdAt, fromThoughtId, category };
+  return { id, authorId, title, thesis, definitions, sources, createdAt, fromThoughtId, category };
 }
 
 export function createDebate({
@@ -92,6 +111,8 @@ export function createDebateTurn({
   authorId,
   content,
   createdAt = new Date().toISOString(),
+  kind = 'round',
+  roundNumber = null,
 }) {
-  return { id, debateId, turnNumber, authorId, content, createdAt };
+  return { id, debateId, turnNumber, authorId, content, createdAt, kind, roundNumber };
 }

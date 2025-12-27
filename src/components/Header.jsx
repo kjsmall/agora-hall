@@ -1,13 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import NotificationBell from './NotificationBell';
 
-export default function Header({ currentUser, onLogout }) {
+export default function Header({
+  currentUser,
+  onLogout,
+  notifications,
+  unreadCount,
+  notificationsOpen,
+  onToggleNotifications,
+  onNotificationClick,
+}) {
   return (
-    <header className="flex items-center justify-between py-6">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
       <Link to="/" className="text-2xl font-semibold tracking-tight text-cyan-200">
         Agora Hall
       </Link>
-      <div className="flex items-center gap-6 text-sm">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
         <Link to="/" className="text-slate-200 hover:text-white transition-colors">
           Home
         </Link>
@@ -18,11 +27,24 @@ export default function Header({ currentUser, onLogout }) {
           Explore
         </Link>
         <Link
-          to={`/profile/${currentUser.id}`}
+          to="/people"
+          className="text-slate-200 hover:text-white transition-colors"
+        >
+          People
+        </Link>
+        <Link
+          to={`/profile`}
           className="text-slate-200 hover:text-white transition-colors"
         >
           Profile
         </Link>
+        <NotificationBell
+          notifications={notifications}
+          unreadCount={unreadCount}
+          open={notificationsOpen}
+          onToggle={onToggleNotifications}
+          onNotificationClick={onNotificationClick}
+        />
         <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">
           <span className="text-slate-100">{currentUser.username}</span>
           <button
