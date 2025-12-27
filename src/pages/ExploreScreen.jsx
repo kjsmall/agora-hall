@@ -197,7 +197,7 @@ export default function ExploreScreen({ thoughts, positions, debates, getDisplay
         <p className="text-slate-400 mt-2">
           Curated signals from structured exchange—no algorithmic feeds, just tagged paths into the debate hall.
         </p>
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+        <div className="mt-4 rounded-xl bg-slate-900/80 p-4">
           <p className="text-xs text-slate-400 uppercase font-semibold">Most active (last 7 days)</p>
           {topPosters.length === 0 && <p className="text-slate-400 text-sm mt-2">No activity yet.</p>}
           <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

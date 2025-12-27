@@ -16,6 +16,8 @@ import ThoughtScreen from './pages/ThoughtScreen';
 import ExploreScreen from './pages/ExploreScreen';
 import PeopleScreen from './pages/PeopleScreen';
 import SignupScreen from './pages/SignupScreen';
+import ForgotPasswordScreen from './pages/ForgotPasswordScreen';
+import ResetPasswordScreen from './pages/ResetPasswordScreen';
 import Header from './components/Header';
 import { CATEGORY_OPTIONS, DEBATE_STATUS, createDebate, createDebateTurn, createPosition, createThought } from './utils/domainModels';
 import { supabase } from './utils/supabaseClient';
@@ -31,6 +33,7 @@ const POSITIONS_PER_DAY = 1;
 
 // Max number of signed-up users allowed; adjust as needed to cap signups.
 const MAX_USERS = 5;
+const SITE_URL = process.env.REACT_APP_SITE_URL || window.location.origin;
 const slugifyCategory = (value) =>
   (value || '')
     .toLowerCase()
@@ -304,6 +307,10 @@ function AppShell() {
   }, [debateVotes]);
 
   useEffect(() => {
+    if (!currentUser) {
+      setAuthNotice(null);
+      setAuthError(null);
+    }
     if (currentUser) {
       fetchThoughts();
     } else {
@@ -1425,6 +1432,26 @@ function AppShell() {
                 <Navigate to="/" replace />
               ) : (
                 <LoginScreen onLogin={handleLogin} error={authError} notice={authNotice} />
+              )
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              currentUser ? (
+                <Navigate to="/" replace />
+              ) : (
+                <ForgotPasswordScreen siteUrl={SITE_URL} />
+              )
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              currentUser ? (
+                <Navigate to="/" replace />
+              ) : (
+                <ResetPasswordScreen />
               )
             }
           />

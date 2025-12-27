@@ -4,10 +4,14 @@ import { Link } from 'react-router-dom';
 export default function LoginScreen({ onLogin, error, notice }) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onLogin(identifier, password);
+    if (submitting) return;
+    setSubmitting(true);
+    await onLogin(identifier, password);
+    setSubmitting(false);
   };
 
   return (
@@ -45,15 +49,23 @@ export default function LoginScreen({ onLogin, error, notice }) {
           {notice && <p className="text-sm text-cyan-200">{notice}</p>}
           <button
             type="submit"
-            className="w-full py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors"
+            disabled={submitting}
+            className="w-full py-2 rounded-lg bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors disabled:opacity-60"
           >
-            Enter Agora
+            {submitting ? 'Signing in...' : 'Enter Agora'}
           </button>
         </form>
-        <p className="text-xs text-slate-400 mt-4">
-          Don’t have an account?{' '}
-          <Link to="/signup" className="text-cyan-300 hover:text-white">Create one</Link>
-        </p>
+        <div className="mt-4 flex flex-col gap-2 text-xs text-slate-400">
+          <p>
+            Don’t have an account?{' '}
+            <Link to="/signup" className="text-cyan-300 hover:text-white">Create one</Link>
+          </p>
+          <p>
+            <Link to="/forgot-password" className="text-cyan-300 hover:text-white">
+              Forgot password?
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
