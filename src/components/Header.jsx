@@ -13,9 +13,12 @@ export default function Header({
 }) {
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
-      <Link to="/" className="text-2xl font-semibold tracking-tight text-cyan-200">
-        Agora Hall
-      </Link>
+      <div>
+        <Link to="/" className="text-2xl font-semibold tracking-tight text-cyan-200 leading-tight">
+          Agora Hall
+        </Link>
+        <div className="text-[10px] text-slate-400 mt-1">Version 1.0.0</div>
+      </div>
       <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
         <Link to="/" className="text-slate-200 hover:text-white transition-colors">
           Home
